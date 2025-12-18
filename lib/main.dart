@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
+
 
 void main() => runApp(const MyApp());
 
@@ -101,16 +101,40 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
         // ignore: avoid_print
         print("DataChannel state: $state");
 
-        if (state == RTCDataChannelState.RTCDataChannelOpen) {
-          _dc!.send(RTCDataChannelMessage(jsonEncode({
-            "type": "session.update",
-            "session": {
-              "turn_detection": {"type": "server_vad"},
-              "voice": "alloy",
-              "modalities": ["audio", "text"]
-            }
-          })));
-        }
+        // if (state == RTCDataChannelState.RTCDataChannelOpen) {
+        //   _dc!.send(RTCDataChannelMessage(jsonEncode({
+        //     "type": "session.update",
+        //     "session": {
+        //       "turn_detection": {"type": "server_vad"},
+        //       "voice": "alloy",
+        //       "modalities": ["audio", "text"]
+        //     }
+        //   })));
+        // }
+
+        // if (state == RTCDataChannelState.RTCDataChannelOpen) {
+        //   // Deterministic test: force an audio response via text.
+        //   final userText = {
+        //     "type": "conversation.item.create",
+        //     "item": {
+        //       "type": "message",
+        //       "role": "user",
+        //       "content": [
+        //         {"type": "input_text", "text": "Say hello in one short sentence."}
+        //       ]
+        //     }
+        //   };
+
+        //   final responseCreate = {
+        //     "type": "response.create",
+        //     "response": {
+        //       "output_modalities": ["audio"],
+        //     }
+        //   };
+
+        //   _dc!.send(RTCDataChannelMessage(jsonEncode(userText)));
+        //   _dc!.send(RTCDataChannelMessage(jsonEncode(responseCreate)));
+        // }
       };
 
       _dc!.onMessage = (RTCDataChannelMessage msg) {
@@ -175,7 +199,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     final streamed = await req.send();
     final body = await streamed.stream.bytesToString();
 
-    if (streamed.statusCode != 201) {
+    if (streamed.statusCode != 200 && streamed.statusCode != 201) {
       throw Exception("OpenAI create call failed ${streamed.statusCode}: $body");
     }
     return body; // SDP answer

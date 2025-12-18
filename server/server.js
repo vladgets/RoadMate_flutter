@@ -15,7 +15,7 @@ app.get("/token", async (req, res) => {
       session: {
         type: "realtime",
         model: "gpt-realtime",
-
+        output_modalities: ["audio"],
         audio: {
           input: {
             turn_detection: { type: "server_vad" },
