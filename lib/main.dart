@@ -164,16 +164,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     req.fields['session'] = jsonEncode({
       "type": "realtime",
       "model": "gpt-realtime",
-      "voice": "alloy",
-      "turn_detection": {"type": "server_vad"},
+      "audio": {
+        "input": {"turn_detection": {"type": "server_vad"}},
+        "output": {"voice": "alloy"},
+      }
     });
 
-    req.files.add(http.MultipartFile.fromString(
-      'sdp',
-      offerSdp,
-      filename: 'offer.sdp',
-      contentType: MediaType('application', 'sdp'),
-    ));
+    req.fields['sdp'] = offerSdp;
 
     final streamed = await req.send();
     final body = await streamed.stream.bytesToString();
