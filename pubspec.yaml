@@ -12,6 +12,7 @@ dependencies:
   flutter_webrtc: ^0.12.0
   http: ^1.2.2
   http_parser: ^4.0.2
+  geolocator: ^13.0.0
 
 dev_dependencies:
   flutter_test:

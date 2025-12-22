@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
-
+import 'config.dart';
+import 'tools.dart';
 
 void main() => runApp(const MyApp());
 
@@ -35,8 +37,6 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   String? _status;
   String? _error;
 
-  // For Android emulator use: http://10.0.2.2:3000/token
-  // For real phone: http://<YOUR_MAC_LAN_IP>:3000/token
   // final String tokenServerUrl = "http://10.0.2.2:3000/token";
   final String tokenServerUrl = "https://roadmate-flutter.onrender.com/token";
 
@@ -102,46 +102,15 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
         // ignore: avoid_print
         print("DataChannel state: $state");
 
-        // if (state == RTCDataChannelState.RTCDataChannelOpen) {
-        //   _dc!.send(RTCDataChannelMessage(jsonEncode({
-        //     "type": "session.update",
-        //     "session": {
-        //       "turn_detection": {"type": "server_vad"},
-        //       "voice": "alloy",
-        //       "modalities": ["audio", "text"]
-        //     }
-        //   })));
-        // }
-
-        // if (state == RTCDataChannelState.RTCDataChannelOpen) {
-        //   // Deterministic test: force an audio response via text.
-        //   final userText = {
-        //     "type": "conversation.item.create",
-        //     "item": {
-        //       "type": "message",
-        //       "role": "user",
-        //       "content": [
-        //         {"type": "input_text", "text": "Say hello in one short sentence."}
-        //       ]
-        //     }
-        //   };
-
-        //   final responseCreate = {
-        //     "type": "response.create",
-        //     "response": {
-        //       "output_modalities": ["audio"],
-        //     }
-        //   };
-
-        //   _dc!.send(RTCDataChannelMessage(jsonEncode(userText)));
-        //   _dc!.send(RTCDataChannelMessage(jsonEncode(responseCreate)));
-        // }
       };
 
       _dc!.onMessage = (RTCDataChannelMessage msg) {
         // You can log JSON events here for debugging.
         // ignore: avoid_print
         print("OAI event: ${msg.text}");
+
+        // Best-effort parse and route.
+        handleOaiEvent(msg.text);
       };
 
       // 6) Offer/Answer SDP exchange
@@ -188,10 +157,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // Optional session override; can be minimal if you already set it in /token.
     req.fields['session'] = jsonEncode({
       "type": "realtime",
-      "model": "gpt-realtime-mini-2025-12-15",
+      "model": Config.model,
+      "instructions": Config.systemPrompt,
+      "tools": Config.tools,
+      "tool_choice": "auto",
       "audio": {
         "input": {"turn_detection": {"type": "server_vad"}},
-        "output": {"voice": "marin"},
+        "output": {"voice": Config.voice},
       }
     });
 
@@ -232,6 +204,124 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     }
   }
 
+  /// Simple implementation of tool handling for now
+  void handleOaiEvent(String text) {
+    Map<String, dynamic> evt;
+
+    // Parse JSON
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! Map<String, dynamic>) return;
+      evt = decoded;
+    } catch (_) {
+      return; // Ignore non-JSON messages
+    }
+
+    final item = evt['item'];
+
+    // We only care about function/tool calls
+    if (item is! Map<String, dynamic>) return;
+    if (item['type'] != 'function_call') return;
+
+    // ignore: avoid_print
+    print("Function call event: $item");
+    final callId = item['call_id'] ?? item['id'];
+    final name = item['name'];
+    final arguments = item['arguments'];
+
+    if (callId == null || name == null) return;
+
+    _executeToolCallFromEvent(
+      {
+        'call_id': callId,
+        'name': name,
+        'arguments': arguments,
+      }
+    );
+  }
+
+ late final Map<String, Future<Map<String, dynamic>> Function(dynamic args)> _tools = {
+   'get_current_location': (_) async {
+     final loc = await getCurrentLocation(); // <-- your implementation
+     return loc; // must be JSON-serializable Map
+   },
+ };
+
+  // late final Map<String, Future<Map<String, dynamic>> Function(dynamic args)> _tools = {
+  //   'get_current_location': (args) async {
+  //     debugPrint("🔥 TOOL CALLED: get_current_location");
+  //     debugPrint("Args: $args");
+
+  //     return {
+  //       "lat": 37.4219983,
+  //       "lon": -122.084,
+  //       "accuracy": "stub",
+  //       "source": "mock",
+  //     };
+  //   },
+  // };
+
+
+  /// Extracts tool name + arguments from an event, runs the handler,
+  /// and sends the tool output back to the model over the data channel.
+  Future<void> _executeToolCallFromEvent(Map<String, dynamic> evt) async {
+    final String? callId = evt['call_id'];
+    final String? toolName = evt['name'];
+    if (callId == null || toolName == null || toolName.isEmpty) return;
+
+    dynamic args = evt['arguments'];
+    if (args == '') {
+      args = {};
+    }
+    else if (args is String) {
+      args = jsonDecode(args);
+    }
+
+    final toolHandler = _tools[toolName];
+    if (toolHandler == null) return;
+
+    try {
+      final Map<String, dynamic> result = await toolHandler(args);
+      await _sendToolOutput(callId: callId, name: toolName, output: result);
+    } catch (e) {
+      await _sendToolOutput(
+        callId: callId,
+        name: toolName,
+        output: {'error': e.toString()},
+      );
+    }
+  }
+
+  /// Sends tool output back to the model.
+  ///
+  /// The Realtime API expects a "tool output" / "function_call_output" item.
+  /// If your logs show a different required shape, adjust here (this is the single place).
+  Future<void> _sendToolOutput({
+    required String callId,
+    required String name,
+    required Map<String, dynamic> output,
+  }) async {
+    final dc = _dc;
+    if (dc == null || dc.state != RTCDataChannelState.RTCDataChannelOpen) return;
+
+    final payload = {
+      'type': 'conversation.item.create',
+      'item': {
+        'type': 'function_call_output',
+        'call_id': callId,
+        // 'name': name,
+        'output': jsonEncode(output),
+      },
+    };
+
+    dc.send(RTCDataChannelMessage(jsonEncode(payload)));
+
+    // Ask the model to continue after receiving the tool output.
+    dc.send(RTCDataChannelMessage(jsonEncode({'type': 'response.create'})));
+  }
+
+
+  /// UI part
   @override
   Widget build(BuildContext context) {
     final isBusy = _connecting;

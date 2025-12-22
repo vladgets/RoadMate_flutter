@@ -21,7 +21,7 @@ app.get("/token", async (req, res) => {
             turn_detection: { type: "server_vad" },
           },
           output: {
-            voice: "alloy",
+            voice: "marin",
           },
         },
       },
