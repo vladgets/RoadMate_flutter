@@ -1,42 +1,47 @@
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
-
-/// Fetches the user's current GPS location.
-/// Returns the most accurate location available from the device.
 Future<Map<String, dynamic>> getCurrentLocation() async {
-  // Permission flow
   var permission = await Geolocator.checkPermission();
   if (permission == LocationPermission.denied) {
     permission = await Geolocator.requestPermission();
   }
 
-  if (permission == LocationPermission.deniedForever) {
-    return {
-      "ok": false,
-      "error": "Location permission deniedForever",
-    };
-  }
-
-  if (permission == LocationPermission.denied) {
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
     return {
       "ok": false,
       "error": "Location permission denied",
     };
   }
 
-  final locationSettings = const LocationSettings(
-    accuracy: LocationAccuracy.bestForNavigation,
-    distanceFilter: 0,
-    timeLimit: Duration(seconds: 10),
+  final position = await Geolocator.getCurrentPosition(
+    locationSettings: const LocationSettings(
+      accuracy: LocationAccuracy.bestForNavigation,
+    ),
   );
 
-  final position = await Geolocator.getCurrentPosition(
-    locationSettings: locationSettings,
+  // 🔹 Reverse geocoding
+  final placemarks = await placemarkFromCoordinates(
+    position.latitude,
+    position.longitude,
   );
+
+  final place = placemarks.isNotEmpty ? placemarks.first : null;
 
   return {
     "ok": true,
     "lat": position.latitude,
-    "lng": position.longitude,
+    "lon": position.longitude,
+
+    // Human-readable address
+    "address": place == null ? null : {
+      "street": place.street,
+      "city": place.locality,
+      "state": place.administrativeArea,
+      "country": place.country,
+      "postal_code": place.postalCode,
+      "name": place.name,
+    },
   };
 }
