@@ -188,10 +188,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // Optional session override; can be minimal if you already set it in /token.
     req.fields['session'] = jsonEncode({
       "type": "realtime",
-      "model": "gpt-realtime",
+      "model": "gpt-realtime-mini-2025-12-15",
       "audio": {
         "input": {"turn_detection": {"type": "server_vad"}},
-        "output": {"voice": "alloy"},
+        "output": {"voice": "marin"},
       }
     });
 

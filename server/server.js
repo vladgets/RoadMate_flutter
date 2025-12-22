@@ -14,7 +14,7 @@ app.get("/token", async (req, res) => {
       expires_after: { anchor: "created_at", seconds: 600 },
       session: {
         type: "realtime",
-        model: "gpt-realtime",
+        model: "gpt-realtime-mini-2025-12-15",
         output_modalities: ["audio"],
         audio: {
           input: {
