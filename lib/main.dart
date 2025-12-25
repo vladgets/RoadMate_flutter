@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'settings_view.dart';
-
+import 'config.dart';
+import 'tools.dart';
 
 void main() => runApp(const MyApp());
 
@@ -146,6 +148,9 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
         // You can log JSON events here for debugging.
         // ignore: avoid_print
         print("OAI event: ${msg.text}");
+
+        // Best-effort parse and route.
+        handleOaiEvent(msg.text);
       };
 
       // 6) Offer/Answer SDP exchange
@@ -189,15 +194,20 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // IMPORTANT: use the ephemeral key here (NOT your real API key).
     req.headers['Authorization'] = "Bearer $ephemeralKey";
 
-    // Create session with instructions from user profile
-    final instructions = _buildInstructions();
+    // Create session with instructions from user profile combined with Config
+    final userInstructions = _buildInstructions();
+    // Combine user profile instructions with base system prompt
+    final combinedInstructions = '${Config.systemPrompt}\n\n$userInstructions';
+    
     req.fields['session'] = jsonEncode({
       "type": "realtime",
-      "model": "gpt-realtime",
-      "instructions": instructions,
+      "model": Config.model,
+      "instructions": combinedInstructions,
+      "tools": Config.tools,
+      "tool_choice": "auto",
       "audio": {
         "input": {"turn_detection": {"type": "server_vad"}},
-        "output": {"voice": "alloy"},
+        "output": {"voice": Config.voice},
       }
     });
 
@@ -364,6 +374,136 @@ Decision logic:
     }
   }
 
+  /// Simple implementation of tool handling for now
+  void handleOaiEvent(String text) {
+    Map<String, dynamic> evt;
+
+    // Parse JSON
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! Map<String, dynamic>) return;
+      evt = decoded;
+    } catch (_) {
+      return; // Ignore non-JSON messages
+    }
+
+    // Check if this is a conversation.item.create event with function_call
+    if (evt['type'] == 'conversation.item.create') {
+      final item = evt['item'];
+      if (item is! Map<String, dynamic>) return;
+      if (item['type'] != 'function_call') return;
+
+      // ignore: avoid_print
+      print("Function call event: $item");
+      
+      // Try different possible field names for call_id
+      final callId = item['call_id'] ?? item['id'] ?? item['function_call_id'];
+      final functionCall = item['function_call'];
+      String? name;
+      dynamic arguments;
+      
+      if (functionCall is Map<String, dynamic>) {
+        name = functionCall['name'] as String?;
+        arguments = functionCall['arguments'];
+      } else {
+        name = item['name'] as String?;
+        arguments = item['arguments'];
+      }
+
+      if (callId == null || name == null) return;
+
+      _executeToolCallFromEvent(
+        {
+          'call_id': callId,
+          'name': name,
+          'arguments': arguments,
+        }
+      );
+    }
+  }
+
+ late final Map<String, Future<Map<String, dynamic>> Function(dynamic args)> _tools = {
+   'get_current_location': (_) async {
+     final loc = await getCurrentLocation(); // <-- your implementation
+     return loc; // must be JSON-serializable Map
+   },
+ };
+
+  // late final Map<String, Future<Map<String, dynamic>> Function(dynamic args)> _tools = {
+  //   'get_current_location': (args) async {
+  //     debugPrint("🔥 TOOL CALLED: get_current_location");
+  //     debugPrint("Args: $args");
+
+  //     return {
+  //       "lat": 37.4219983,
+  //       "lon": -122.084,
+  //       "accuracy": "stub",
+  //       "source": "mock",
+  //     };
+  //   },
+  // };
+
+
+  /// Extracts tool name + arguments from an event, runs the handler,
+  /// and sends the tool output back to the model over the data channel.
+  Future<void> _executeToolCallFromEvent(Map<String, dynamic> evt) async {
+    final String? callId = evt['call_id'];
+    final String? toolName = evt['name'];
+    if (callId == null || toolName == null || toolName.isEmpty) return;
+
+    dynamic args = evt['arguments'];
+    if (args == '') {
+      args = {};
+    }
+    else if (args is String) {
+      args = jsonDecode(args);
+    }
+
+    final toolHandler = _tools[toolName];
+    if (toolHandler == null) return;
+
+    try {
+      final Map<String, dynamic> result = await toolHandler(args);
+      await _sendToolOutput(callId: callId, name: toolName, output: result);
+    } catch (e) {
+      await _sendToolOutput(
+        callId: callId,
+        name: toolName,
+        output: {'error': e.toString()},
+      );
+    }
+  }
+
+  /// Sends tool output back to the model.
+  ///
+  /// The Realtime API expects a "tool output" / "function_call_output" item.
+  /// If your logs show a different required shape, adjust here (this is the single place).
+  Future<void> _sendToolOutput({
+    required String callId,
+    required String name,
+    required Map<String, dynamic> output,
+  }) async {
+    final dc = _dc;
+    if (dc == null || dc.state != RTCDataChannelState.RTCDataChannelOpen) return;
+
+    final payload = {
+      'type': 'conversation.item.create',
+      'item': {
+        'type': 'function_call_output',
+        'call_id': callId,
+        // 'name': name,
+        'output': jsonEncode(output),
+      },
+    };
+
+    dc.send(RTCDataChannelMessage(jsonEncode(payload)));
+
+    // Ask the model to continue after receiving the tool output.
+    dc.send(RTCDataChannelMessage(jsonEncode({'type': 'response.create'})));
+  }
+
+
+  /// UI part
   @override
   Widget build(BuildContext context) {
     final isBusy = _connecting;
