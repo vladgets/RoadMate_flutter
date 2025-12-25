@@ -194,15 +194,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // IMPORTANT: use the ephemeral key here (NOT your real API key).
     req.headers['Authorization'] = "Bearer $ephemeralKey";
 
-    // Create session with instructions from user profile combined with Config
-    final userInstructions = _buildInstructions();
-    // Combine user profile instructions with base system prompt
-    final combinedInstructions = '${Config.systemPrompt}\n\n$userInstructions';
+    // Create session with instructions from user profile (replacing Config.systemPrompt)
+    final instructions = _buildInstructions();
     
     req.fields['session'] = jsonEncode({
       "type": "realtime",
       "model": Config.model,
-      "instructions": combinedInstructions,
+      "instructions": instructions,
       "tools": Config.tools,
       "tool_choice": "auto",
       "audio": {
@@ -232,33 +230,11 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // ignore: avoid_print
     print("Pronoun: $_pronoun");
     
-    final instructions = '''
-You are an intelligent real-time driving assistant.
-
-User profile:
-- Name: $_userName
-- Language: $_language
-- Address using "$_pronoun"
-
-Context awareness:
-- Assume the user is driving unless stated otherwise
-- Adjust verbosity based on urgency and road situation
-
-Response rules:
-- Always respond in $_language
-- Be concise and informative
-- Address the user as "$_pronoun"
-
-Core functions:
-- Navigation and rerouting
-- Weather and road condition alerts
-- Time-sensitive reminders and notifications
-
-Decision logic:
-- If information is not critical, summarize it
-- If a task may distract the driver, postpone or simplify it
-- Prioritize safety over completeness
-''';
+    final instructions = Config.systemPrompt(
+      userName: _userName,
+      language: _language,
+      pronoun: _pronoun,
+    );
     
     // ignore: avoid_print
     print("Generated instructions preview: ${instructions.substring(0, instructions.length > 100 ? 100 : instructions.length)}...");
