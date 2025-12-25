@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'settings_view.dart';
 
 
 void main() => runApp(const MyApp());
@@ -35,15 +37,50 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   String? _status;
   String? _error;
 
+  // Параметры для промпта
+  String _userName = "Alex";
+  String _language = "English";
+  String _pronoun = "you";
+
   // For Android emulator use: http://10.0.2.2:3000/token
   // For real phone: http://<YOUR_MAC_LAN_IP>:3000/token
   // final String tokenServerUrl = "http://10.0.2.2:3000/token";
   final String tokenServerUrl = "https://roadmate-flutter.onrender.com/token";
 
   @override
+  void initState() {
+    super.initState();
+    _loadUserPreferences();
+  }
+
+  @override
   void dispose() {
     _disconnect();
     super.dispose();
+  }
+
+  Future<void> _loadUserPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _userName = prefs.getString('userName') ?? 'Alex';
+      _language = prefs.getString('language') ?? 'English';
+      _pronoun = prefs.getString('pronoun') ?? 'you';
+    });
+    // ignore: avoid_print
+    print("=== Loaded user preferences ===");
+    // ignore: avoid_print
+    print("Name: $_userName");
+    // ignore: avoid_print
+    print("Language: $_language");
+    // ignore: avoid_print
+    print("Pronoun: $_pronoun");
+  }
+
+  Future<void> _saveUserPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('userName', _userName);
+    await prefs.setString('language', _language);
+    await prefs.setString('pronoun', _pronoun);
   }
 
   Future<void> _toggle() async {
@@ -101,41 +138,8 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       _dc!.onDataChannelState = (RTCDataChannelState state) {
         // ignore: avoid_print
         print("DataChannel state: $state");
-
-        // if (state == RTCDataChannelState.RTCDataChannelOpen) {
-        //   _dc!.send(RTCDataChannelMessage(jsonEncode({
-        //     "type": "session.update",
-        //     "session": {
-        //       "turn_detection": {"type": "server_vad"},
-        //       "voice": "alloy",
-        //       "modalities": ["audio", "text"]
-        //     }
-        //   })));
-        // }
-
-        // if (state == RTCDataChannelState.RTCDataChannelOpen) {
-        //   // Deterministic test: force an audio response via text.
-        //   final userText = {
-        //     "type": "conversation.item.create",
-        //     "item": {
-        //       "type": "message",
-        //       "role": "user",
-        //       "content": [
-        //         {"type": "input_text", "text": "Say hello in one short sentence."}
-        //       ]
-        //     }
-        //   };
-
-        //   final responseCreate = {
-        //     "type": "response.create",
-        //     "response": {
-        //       "output_modalities": ["audio"],
-        //     }
-        //   };
-
-        //   _dc!.send(RTCDataChannelMessage(jsonEncode(userText)));
-        //   _dc!.send(RTCDataChannelMessage(jsonEncode(responseCreate)));
-        // }
+        // Instructions are already sent when creating the session
+        // _updateSessionWithInstructions() is only needed when updating profile during connection
       };
 
       _dc!.onMessage = (RTCDataChannelMessage msg) {
@@ -185,10 +189,12 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // IMPORTANT: use the ephemeral key here (NOT your real API key).
     req.headers['Authorization'] = "Bearer $ephemeralKey";
 
-    // Optional session override; can be minimal if you already set it in /token.
+    // Create session with instructions from user profile
+    final instructions = _buildInstructions();
     req.fields['session'] = jsonEncode({
       "type": "realtime",
       "model": "gpt-realtime",
+      "instructions": instructions,
       "audio": {
         "input": {"turn_detection": {"type": "server_vad"}},
         "output": {"voice": "alloy"},
@@ -204,6 +210,132 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       throw Exception("OpenAI create call failed ${streamed.statusCode}: $body");
     }
     return body; // SDP answer
+  }
+
+  String _buildInstructions() {
+    // ignore: avoid_print
+    print("=== Building instructions with current values ===");
+    // ignore: avoid_print
+    print("Name: $_userName");
+    // ignore: avoid_print
+    print("Language: $_language");
+    // ignore: avoid_print
+    print("Pronoun: $_pronoun");
+    
+    final instructions = '''
+You are an intelligent real-time driving assistant.
+
+User profile:
+- Name: $_userName
+- Language: $_language
+- Address using "$_pronoun"
+
+Context awareness:
+- Assume the user is driving unless stated otherwise
+- Adjust verbosity based on urgency and road situation
+
+Response rules:
+- Always respond in $_language
+- Be concise and informative
+- Address the user as "$_pronoun"
+
+Core functions:
+- Navigation and rerouting
+- Weather and road condition alerts
+- Time-sensitive reminders and notifications
+
+Decision logic:
+- If information is not critical, summarize it
+- If a task may distract the driver, postpone or simplify it
+- Prioritize safety over completeness
+''';
+    
+    // ignore: avoid_print
+    print("Generated instructions preview: ${instructions.substring(0, instructions.length > 100 ? 100 : instructions.length)}...");
+    
+    return instructions;
+  }
+
+  void _updateSessionWithInstructions() {
+    if (_dc == null) {
+      // ignore: avoid_print
+      print("Data channel is null, cannot update session");
+      return;
+    }
+
+    final instructions = _buildInstructions();
+    
+    // ignore: avoid_print
+    print("=== Updating session with instructions ===");
+    // ignore: avoid_print
+    print("Name: $_userName");
+    // ignore: avoid_print
+    print("Language: $_language");
+    // ignore: avoid_print
+    print("Pronoun: $_pronoun");
+
+    try {
+      _dc!.send(RTCDataChannelMessage(jsonEncode({
+        "type": "session.update",
+        "session": {
+          "type": "realtime",
+          "instructions": instructions,
+        }
+      })));
+      // ignore: avoid_print
+      print("Session updated successfully");
+    } catch (e) {
+      // ignore: avoid_print
+      print("Failed to update session: $e");
+    }
+  }
+
+  // Методы для изменения параметров
+  Future<void> updateUserName(String name) async {
+    setState(() {
+      _userName = name;
+    });
+    await _saveUserPreferences();
+    if (_connected) {
+      _updateSessionWithInstructions();
+    }
+  }
+
+  Future<void> updateLanguage(String language) async {
+    setState(() {
+      _language = language;
+    });
+    await _saveUserPreferences();
+    if (_connected) {
+      _updateSessionWithInstructions();
+    }
+  }
+
+  Future<void> updatePronoun(String pronoun) async {
+    setState(() {
+      _pronoun = pronoun;
+    });
+    await _saveUserPreferences();
+    if (_connected) {
+      _updateSessionWithInstructions();
+    }
+  }
+
+  // Метод для обновления всех параметров сразу
+  Future<void> updateUserParameters({
+    String? name,
+    String? language,
+    String? pronoun,
+  }) async {
+    setState(() {
+      if (name != null) _userName = name;
+      if (language != null) _language = language;
+      if (pronoun != null) _pronoun = pronoun;
+    });
+    await _saveUserPreferences();
+    if (_connected) {
+      _updateSessionWithInstructions();
+    }
   }
 
   Future<void> _disconnect() async {
@@ -240,6 +372,28 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
     return Scaffold(
       backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        actions: [
+            IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white70),
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsView()),
+              );
+              // Reload preferences if profile was updated
+              if (result == true) {
+                await _loadUserPreferences();
+                if (_connected) {
+                  _updateSessionWithInstructions();
+                }
+              }
+            },
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: Padding(
