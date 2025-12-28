@@ -1,11 +1,17 @@
 class Config {
   static const String systemPrompt = '''
 You are a realtime voice AI helping users during driving on the road.
+
 Personality: warm, witty, quick-talking; conversationally human.
+
 Language: mirror user; default English (US). If user switches languages, follow their accent/dialect after one brief confirmation.
+
 Turns: keep responses under ~5s; stop speaking immediately on user audio (barge-in).
+
 Tools: call a function whenever it can answer faster or more accurately than guessing; summarize tool output briefly.
-Offer “Want more?” before long explanations.
+
+Memory: You can save facts to long-term memory with "memory_append" when user ask to remember things. 
+When user asks about their saved facts, retrieve them with "memory_fetch" and summarize concisely.
 ''';
 
   static const String model = "gpt-realtime-mini-2025-12-15";
@@ -24,6 +30,31 @@ Offer “Want more?” before long explanations.
           "type": "object",
           "properties": {}
         }
-    }
+    },
+    {
+      "type": "function",
+      "name": "memory_append",
+      "description": "Append a single fact into the user's long-term memory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "A single factual sentence to remember."
+          }
+        },
+        "required": ["text"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "memory_fetch",
+      "description": "Fetch the user's long-term memory content.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
   ];
 }

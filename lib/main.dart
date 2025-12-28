@@ -5,6 +5,8 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
 import 'config.dart';
 import 'tools.dart';
+import 'memory_settings_screen.dart';
+import 'memory_store.dart';
 
 void main() => runApp(const MyApp());
 
@@ -224,7 +226,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     if (item['type'] != 'function_call') return;
 
     // ignore: avoid_print
-    print("Function call event: $item");
+    print(">>> Function call event: $item");
     final callId = item['call_id'] ?? item['id'];
     final name = item['name'];
     final arguments = item['arguments'];
@@ -240,26 +242,21 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     );
   }
 
+
+/// Tool handlers map
  late final Map<String, Future<Map<String, dynamic>> Function(dynamic args)> _tools = {
    'get_current_location': (_) async {
      final loc = await getCurrentLocation(); // <-- your implementation
      return loc; // must be JSON-serializable Map
    },
+   // Long-term memory tools
+   'memory_append': (args) async {
+     return await MemoryStore.toolAppend(args);
+   },
+   'memory_fetch': (_) async {
+     return await MemoryStore.toolRead();
+   },
  };
-
-  // late final Map<String, Future<Map<String, dynamic>> Function(dynamic args)> _tools = {
-  //   'get_current_location': (args) async {
-  //     debugPrint("🔥 TOOL CALLED: get_current_location");
-  //     debugPrint("Args: $args");
-
-  //     return {
-  //       "lat": 37.4219983,
-  //       "lon": -122.084,
-  //       "accuracy": "stub",
-  //       "source": "mock",
-  //     };
-  //   },
-  // };
 
 
   /// Extracts tool name + arguments from an event, runs the handler,
@@ -330,6 +327,22 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
     return Scaffold(
       backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -392,3 +405,32 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     );
   }
 }
+
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Settings'),
+      ),
+      body: ListView(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.psychology_alt_outlined),
+            title: const Text('Long-term Memory'),
+            subtitle: const Text('View and manage stored memory'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MemorySettingsScreen()),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
