@@ -7,6 +7,8 @@ import 'config.dart';
 import 'tools.dart';
 import 'memory_settings_screen.dart';
 import 'memory_store.dart';
+import 'extensions_settings_screen.dart';
+import 'calendar_store.dart';
 
 void main() => runApp(const MyApp());
 
@@ -249,14 +251,18 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
      final loc = await getCurrentLocation(); // <-- your implementation
      return loc; // must be JSON-serializable Map
    },
-   // Long-term memory tools
-   'memory_append': (args) async {
-     return await MemoryStore.toolAppend(args);
-   },
-   'memory_fetch': (_) async {
-     return await MemoryStore.toolRead();
-   },
- };
+  // Long-term memory tools
+  'memory_append': (args) async {
+    return await MemoryStore.toolAppend(args);
+  },
+  'memory_fetch': (_) async {
+    return await MemoryStore.toolRead();
+  },
+  // Calendar tools
+  'get_calendar_data': (_) async {
+    return await CalendarStore.toolGetCalendarData();
+  },
+};
 
 
   /// Extracts tool name + arguments from an event, runs the handler,
@@ -279,8 +285,15 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
     try {
       final Map<String, dynamic> result = await toolHandler(args);
+      // Log calendar function results for debugging
+      if (toolName == 'get_calendar_data') {
+        // ignore: avoid_print
+        print('>>> Calendar function result: ${jsonEncode(result)}');
+      }
       await _sendToolOutput(callId: callId, name: toolName, output: result);
     } catch (e) {
+      // ignore: avoid_print
+      print('>>> Tool execution error ($toolName): $e');
       await _sendToolOutput(
         callId: callId,
         name: toolName,
@@ -425,6 +438,17 @@ class SettingsScreen extends StatelessWidget {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const MemorySettingsScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.extension),
+            title: const Text('Extensions'),
+            subtitle: const Text('Manage calendar and other extensions'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ExtensionsSettingsScreen()),
               );
             },
           ),

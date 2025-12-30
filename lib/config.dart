@@ -12,6 +12,8 @@ Tools: call a function whenever it can answer faster or more accurately than gue
 
 Memory: You can save facts to long-term memory with "memory_append" when user ask to remember things. 
 When user asks about their saved facts, retrieve them with "memory_fetch" and summarize concisely.
+
+Calendar: When user asks about their schedule, events, or meetings (e.g., "What do I have planned for tomorrow?", "When is my meeting with ...?"), use "get_calendar_data" to retrieve their calendar events. Filter and summarize the events based on the user's query.
 ''';
 
   static const String model = "gpt-realtime-mini-2025-12-15";
@@ -50,6 +52,16 @@ When user asks about their saved facts, retrieve them with "memory_fetch" and su
       "type": "function",
       "name": "memory_fetch",
       "description": "Fetch the user's long-term memory content.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "type": "function",
+      "name": "get_calendar_data",
+      "description": "Get the user's calendar events. Returns events from the past 30 days to the next 30 days. Use this when user asks about their schedule, upcoming events, meetings, or what they have planned.",
       "parameters": {
         "type": "object",
         "properties": {},
