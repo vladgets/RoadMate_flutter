@@ -262,6 +262,15 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   'get_calendar_data': (_) async {
     return await CalendarStore.toolGetCalendarData();
   },
+  'create_calendar_event': (args) async {
+    return await CalendarStore.toolCreateCalendarEvent(args);
+  },
+  'update_calendar_event': (args) async {
+    return await CalendarStore.toolUpdateCalendarEvent(args);
+  },
+  'delete_calendar_event': (args) async {
+    return await CalendarStore.toolDeleteCalendarEvent(args);
+  },
 };
 
 
@@ -286,9 +295,12 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     try {
       final Map<String, dynamic> result = await toolHandler(args);
       // Log calendar function results for debugging
-      if (toolName == 'get_calendar_data') {
+      if (toolName == 'get_calendar_data' || 
+          toolName == 'create_calendar_event' || 
+          toolName == 'update_calendar_event' || 
+          toolName == 'delete_calendar_event') {
         // ignore: avoid_print
-        print('>>> Calendar function result: ${jsonEncode(result)}');
+        print('>>> Calendar function ($toolName) result: ${jsonEncode(result)}');
       }
       await _sendToolOutput(callId: callId, name: toolName, output: result);
     } catch (e) {
