@@ -1,7 +1,26 @@
 import 'package:device_calendar/device_calendar.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:timezone/timezone.dart' as tz;
 
 class CalendarStore {
   static final DeviceCalendarPlugin _deviceCalendarPlugin = DeviceCalendarPlugin();
+
+  static bool _tzInitialized = false;
+
+  static void _ensureTzInitialized() {
+    if (_tzInitialized) return;
+    // Initializes the time zone database. Note: without explicitly setting the
+    // local location (via a native timezone plugin), tz.local defaults to UTC.
+    tzdata.initializeTimeZones();
+    _tzInitialized = true;
+  }
+
+  static tz.TZDateTime _toTz(DateTime dt) {
+    _ensureTzInitialized();
+    // Convert to local time first, then wrap in TZDateTime.
+    final local = dt.isUtc ? dt.toLocal() : dt;
+    return tz.TZDateTime.from(local, tz.local);
+  }
 
   /// Safely convert a value to String, handling null
   static String _safeString(dynamic value) {
@@ -490,8 +509,8 @@ class CalendarStore {
       // Create event
       final event = Event(calendar.id!);
       event.title = title;
-      event.start = start;
-      event.end = end;
+      event.start = _toTz(start);
+      event.end = _toTz(end);
       if (description != null && description.isNotEmpty) {
         event.description = description;
       }
@@ -664,7 +683,7 @@ class CalendarStore {
       if (startStr != null && startStr.isNotEmpty) {
         try {
           newStart = DateTime.parse(startStr);
-          event.start = newStart;
+          event.start = _toTz(newStart);
         } catch (e) {
           return {
             'ok': false,
@@ -675,7 +694,7 @@ class CalendarStore {
       
       if (endStr != null && endStr.isNotEmpty) {
         try {
-          event.end = DateTime.parse(endStr);
+          event.end = _toTz(DateTime.parse(endStr));
         } catch (e) {
           return {
             'ok': false,
@@ -684,7 +703,7 @@ class CalendarStore {
         }
       } else if (newStart != null && eventDuration != null) {
         // If start was updated but end wasn't, preserve the event duration
-        event.end = newStart.add(eventDuration);
+        event.end = _toTz(newStart.add(eventDuration));
       }
       
       if (description != null) {
