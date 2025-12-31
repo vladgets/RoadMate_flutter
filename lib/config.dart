@@ -1,8 +1,9 @@
 class Config {
   static const String systemPrompt = '''
-You are a realtime voice AI helping users during driving on the road.
+You are a realtime voice AI assistant helping users on the go.
 
-Personality: warm, witty, quick-talking; conversationally human.
+Personality: warm, witty, quick-talking; conversationally human. 
+When responding in languages that have grammatical gender in verbs like Russian, always use the feminine grammatical form when referring to yourself.
 
 Language: mirror user; default English (US). If user switches languages, follow their accent/dialect after one brief confirmation.
 
@@ -13,13 +14,7 @@ Tools: call a function whenever it can answer faster or more accurately than gue
 Memory: You can save facts to long-term memory with "memory_append" when user ask to remember things. 
 When user asks about their saved facts, retrieve them with "memory_fetch" and summarize concisely.
 
-Calendar: ALWAYS call "get_calendar_data" IMMEDIATELY when user asks about their schedule, events, meetings, or what they have planned - even if they mention approximate times like "around 7 PM" or "in the evening". Do NOT say you will check without actually calling the function. The function returns events from the past 30 days to the next 30 days. After getting the data, filter and summarize events based on the user's query (date, time, title, etc.).
-
-When user wants to create, update, or delete calendar events, ask clarifying questions to get all necessary information:
-- For creating: title (required), start time (required), end time (optional, defaults to start + 1 hour), description (optional), location (optional)
-- For updating: event_id OR (title and start_date) to find the event, then ask what fields to update
-- For deleting: event_id OR (title and start_date) to find the event
-Always confirm the action before executing (e.g., "I'll create a meeting called X at Y time. Should I proceed?").
+If user asks about their calendar events, use calendar functions to fetch the content.
 ''';
 
   static const String model = "gpt-realtime-mini-2025-12-15";
@@ -30,7 +25,8 @@ Always confirm the action before executing (e.g., "I'll create a meeting called 
   // The model may call these by name; your app must execute them and send back
   // a `function_call_output` event with the returned JSON.
   static const List<Map<String, dynamic>> tools = [
-    {
+    // location related tool
+    { 
       "type": "function",
         "name": "get_current_location",
         "description": "Get the user's current GPS location.",
@@ -39,6 +35,7 @@ Always confirm the action before executing (e.g., "I'll create a meeting called 
           "properties": {}
         }
     },
+    // memory related tools
     {
       "type": "function",
       "name": "memory_append",
@@ -64,16 +61,22 @@ Always confirm the action before executing (e.g., "I'll create a meeting called 
         "required": []
       }
     },
+    // calendar related tools
     {
       "type": "function",
       "name": "get_calendar_data",
-      "description": "ALWAYS call this function immediately when user asks about their schedule, events, meetings, or what they have planned - even if they mention approximate times like 'around 7 PM', 'in the evening', 'today', 'tomorrow', etc. Returns events from the past 30 days to the next 30 days. You MUST call this function to get actual calendar data - do not guess or say you will check without calling it.",
+      "description": "Fetch user calendar data, vents from the past 30 days to the next 30 days.",
       "parameters": {
         "type": "object",
         "properties": {},
         "required": []
       }
     },
+  ];
+
+
+  // Deprecated or currently unused tool definitions.
+  static const List<Map<String, dynamic>> notUsedTools = [
     {
       "type": "function",
       "name": "create_calendar_event",

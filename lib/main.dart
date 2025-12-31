@@ -262,15 +262,15 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   'get_calendar_data': (_) async {
     return await CalendarStore.toolGetCalendarData();
   },
-  'create_calendar_event': (args) async {
-    return await CalendarStore.toolCreateCalendarEvent(args);
-  },
-  'update_calendar_event': (args) async {
-    return await CalendarStore.toolUpdateCalendarEvent(args);
-  },
-  'delete_calendar_event': (args) async {
-    return await CalendarStore.toolDeleteCalendarEvent(args);
-  },
+  // 'create_calendar_event': (args) async {
+  //   return await CalendarStore.toolCreateCalendarEvent(args);
+  // },
+  // 'update_calendar_event': (args) async {
+  //   return await CalendarStore.toolUpdateCalendarEvent(args);
+  // },
+  // 'delete_calendar_event': (args) async {
+  //   return await CalendarStore.toolDeleteCalendarEvent(args);
+  // },
 };
 
 
