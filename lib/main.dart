@@ -103,15 +103,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       _dc = await _pc!.createDataChannel("oai-events", RTCDataChannelInit());
 
       _dc!.onDataChannelState = (RTCDataChannelState state) {
-        // ignore: avoid_print
-        print("DataChannel state: $state");
+        debugPrint("DataChannel state: $state");
 
       };
 
       _dc!.onMessage = (RTCDataChannelMessage msg) {
         // You can log JSON events here for debugging.
-        // ignore: avoid_print
-        print("OAI event: ${msg.text}");
+        debugPrint("OAI event: ${msg.text}");
 
         // Best-effort parse and route.
         handleOaiEvent(msg.text);
@@ -162,7 +160,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     req.fields['session'] = jsonEncode({
       "type": "realtime",
       "model": Config.model,
-      "instructions": Config.systemPrompt,
+      "instructions": Config.buildSystemPrompt(),
       "tools": Config.tools,
       "tool_choice": "auto",
       "audio": {
@@ -227,8 +225,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     if (item is! Map<String, dynamic>) return;
     if (item['type'] != 'function_call') return;
 
-    // ignore: avoid_print
-    print(">>> Function call event: $item");
+    debugPrint(">>> Function call event: $item");
     final callId = item['call_id'] ?? item['id'];
     final name = item['name'];
     final arguments = item['arguments'];
@@ -271,6 +268,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   // 'delete_calendar_event': (args) async {
   //   return await CalendarStore.toolDeleteCalendarEvent(args);
   // },
+  // Time and date tool
+  'get_current_time': (_) async {
+    return await getCurrentTime(); 
+  }
 };
 
 
@@ -295,17 +296,12 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     try {
       final Map<String, dynamic> result = await toolHandler(args);
       // Log calendar function results for debugging
-      if (toolName == 'get_calendar_data' || 
-          toolName == 'create_calendar_event' || 
-          toolName == 'update_calendar_event' || 
-          toolName == 'delete_calendar_event') {
-        // ignore: avoid_print
-        print('>>> Calendar function ($toolName) result: ${jsonEncode(result)}');
+      if (toolName.contains('calendar')) {
+        debugPrint('>>> Calendar function ($toolName) result: ${jsonEncode(result)}');
       }
       await _sendToolOutput(callId: callId, name: toolName, output: result);
     } catch (e) {
-      // ignore: avoid_print
-      print('>>> Tool execution error ($toolName): $e');
+      debugPrint('>>> Tool execution error ($toolName): $e');
       await _sendToolOutput(
         callId: callId,
         name: toolName,

@@ -18,6 +18,7 @@ dependencies:
   device_calendar: ^4.3.0
   shared_preferences: ^2.3.0
   timezone: ^0.9.4
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:

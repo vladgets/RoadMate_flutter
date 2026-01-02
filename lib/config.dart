@@ -1,5 +1,8 @@
+import 'tools.dart';
+
+
 class Config {
-  static const String systemPrompt = '''
+  static const String systemPromptTemplate = '''
 You are a realtime voice AI assistant helping users on the go.
 
 Personality: warm, witty, quick-talking; conversationally human. 
@@ -10,15 +13,22 @@ Language: mirror user; default English (US). If user switches languages, follow 
 Turns: keep responses under ~5s; stop speaking immediately on user audio (barge-in).
 
 Tools: call a function whenever it can answer faster or more accurately than guessing; summarize tool output briefly.
+If user asks about their calendar events, use calendar functions to fetch the content.
 
 Memory: You can save facts to long-term memory with "memory_append" when user ask to remember things. 
 When user asks about their saved facts, retrieve them with "memory_fetch" and summarize concisely.
 
-If user asks about their calendar events, use calendar functions to fetch the content.
+Current date: {{CURRENT_DATE_READABLE}}
 ''';
 
   static const String model = "gpt-realtime-mini-2025-12-15";
   static const String voice = "marin";
+
+
+  /// Build the system prompt with the current readable date
+  static String buildSystemPrompt() {
+    return systemPromptTemplate.replaceAll('{{CURRENT_DATE_READABLE}}', getCurrentReadableDate());
+  }
 
 
   // Tool definitions exposed to the Realtime model.
@@ -58,7 +68,6 @@ If user asks about their calendar events, use calendar functions to fetch the co
       "parameters": {
         "type": "object",
         "properties": {},
-        "required": []
       }
     },
     // calendar related tools
@@ -69,7 +78,16 @@ If user asks about their calendar events, use calendar functions to fetch the co
       "parameters": {
         "type": "object",
         "properties": {},
-        "required": []
+      }
+    },
+    // time and date
+    {
+      "type": "function",
+      "name": "get_current_time",
+      "description": "Returns the user's current local date and time as a human-readable string.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
       }
     },
   ];

@@ -1,5 +1,6 @@
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:intl/intl.dart';
 
 Future<Map<String, dynamic>> getCurrentLocation() async {
   var permission = await Geolocator.checkPermission();
@@ -43,5 +44,22 @@ Future<Map<String, dynamic>> getCurrentLocation() async {
       "postal_code": place.postalCode,
       "name": place.name,
     },
+  };
+}
+
+/// Returning redable date string like "Thursday, January 1, 2026" 
+String getCurrentReadableDate() {
+  final now = DateTime.now();
+  final readableDate = DateFormat.yMMMMEEEEd().format(now);
+  return readableDate;
+}
+
+/// LLM tool: returns current local time as a human-readable string
+/// Example: "Thursday, January 1, 2026 at 6:42 PM"
+Future<Map<String, dynamic>> getCurrentTime() async {
+  final now = DateTime.now();
+
+  return {
+    "readable": DateFormat.yMMMMEEEEd().add_jm().format(now),  
   };
 }

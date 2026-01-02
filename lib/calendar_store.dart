@@ -1,6 +1,7 @@
 import 'package:device_calendar/device_calendar.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter/foundation.dart';
 
 class CalendarStore {
   static final DeviceCalendarPlugin _deviceCalendarPlugin = DeviceCalendarPlugin();
@@ -88,11 +89,9 @@ class CalendarStore {
       }
 
       // Log all found calendars
-      // ignore: avoid_print
-      print('>>> Found ${calendars.length} calendars:');
+      debugPrint('>>> Found ${calendars.length} calendars:');
       for (final cal in calendars) {
-        // ignore: avoid_print
-        print('  - ${cal.name ?? "Unknown"} (id: ${cal.id ?? "null"}, readOnly: ${cal.isReadOnly}, color: ${cal.color})');
+        debugPrint('  - ${cal.name ?? "Unknown"} (id: ${cal.id ?? "null"}, readOnly: ${cal.isReadOnly}, color: ${cal.color})');
       }
 
       // Calculate date range: today ±30 days
@@ -107,15 +106,13 @@ class CalendarStore {
       for (final calendar in calendars) {
         // Process all calendars, including read-only ones (they can still have events)
         if (calendar.id == null || calendar.id!.isEmpty) {
-          // ignore: avoid_print
-          print('>>> Skipping calendar ${calendar.name}: no valid ID');
+          debugPrint('>>> Skipping calendar ${calendar.name}: no valid ID');
           continue; // Skip calendars without valid ID
         }
 
         final calendarName = calendar.name ?? 'Unknown';
         try {
-          // ignore: avoid_print
-          print('>>> Retrieving events from calendar: $calendarName (id: ${calendar.id})');
+          debugPrint('>>> Retrieving events from calendar: $calendarName (id: ${calendar.id})');
           
           final eventsResult = await _deviceCalendarPlugin.retrieveEvents(
             calendar.id!,
@@ -127,15 +124,13 @@ class CalendarStore {
 
           if (!eventsResult.isSuccess) {
             // Log but continue - some calendars may not be accessible
-            // ignore: avoid_print
-            print('>>> Failed to retrieve events from calendar $calendarName: ${eventsResult.errors.join(", ")}');
+            debugPrint('>>> Failed to retrieve events from calendar $calendarName: ${eventsResult.errors.join(", ")}');
             calendarEventCounts[calendarName] = 0;
             continue;
           }
 
           if (eventsResult.data == null) {
-            // ignore: avoid_print
-            print('>>> Calendar $calendarName: data is null');
+            debugPrint('>>> Calendar $calendarName: data is null');
             calendarEventCounts[calendarName] = 0;
             continue; // No events or data is null
           }
@@ -145,16 +140,13 @@ class CalendarStore {
           try {
             events = eventsResult.data;
             if (events == null) {
-              // ignore: avoid_print
-              print('>>> Calendar $calendarName: data is null');
+              debugPrint('>>> Calendar $calendarName: data is null');
               calendarEventCounts[calendarName] = 0;
               continue;
             }
-            // ignore: avoid_print
-            print('>>> Calendar $calendarName: found ${events.length} events');
+            debugPrint('>>> Calendar $calendarName: found ${events.length} events');
           } catch (e) {
-            // ignore: avoid_print
-            print('>>> Calendar $calendarName: error accessing events list: $e');
+            debugPrint('>>> Calendar $calendarName: error accessing events list: $e');
             calendarEventCounts[calendarName] = 0;
             continue;
           }
@@ -187,42 +179,33 @@ class CalendarStore {
             } catch (e, stackTrace) {
               // Log error for individual event but continue processing
               failedCount++;
-              // ignore: avoid_print
-              print('>>> Error processing event #$i from calendar $calendarName: $e');
+              debugPrint('>>> Error processing event #$i from calendar $calendarName: $e');
               // Only print stack trace for first few errors to reduce log spam
               if (failedCount <= 3) {
-                // ignore: avoid_print
-                print('Stack trace: $stackTrace');
+                debugPrint('Stack trace: $stackTrace');
               }
             }
           }
           calendarEventCounts[calendarName] = processedCount;
           if (failedCount > 0) {
-            // ignore: avoid_print
-            print('>>> Calendar $calendarName: processed $processedCount/${events.length} events successfully ($failedCount failed)');
+            debugPrint('>>> Calendar $calendarName: processed $processedCount/${events.length} events successfully ($failedCount failed)');
           } else {
-            // ignore: avoid_print
-            print('>>> Calendar $calendarName: processed $processedCount events successfully');
+            debugPrint('>>> Calendar $calendarName: processed $processedCount events successfully');
           }
         } catch (e, stackTrace) {
           // Log error but continue with other calendars
-          // ignore: avoid_print
-          print('>>> Error retrieving events from calendar $calendarName: $e');
-          // ignore: avoid_print
-          print('Stack trace: $stackTrace');
+          debugPrint('>>> Error retrieving events from calendar $calendarName: $e');
+          debugPrint('Stack trace: $stackTrace');
           calendarEventCounts[calendarName] = 0;
         }
       }
 
       // Log summary
-      // ignore: avoid_print
-      print('>>> Calendar events summary:');
+      debugPrint('>>> Calendar events summary:');
       for (final entry in calendarEventCounts.entries) {
-        // ignore: avoid_print
-        print('  - ${entry.key}: ${entry.value} events');
+        debugPrint('  - ${entry.key}: ${entry.value} events');
       }
-      // ignore: avoid_print
-      print('>>> Total events collected: ${allEvents.length}');
+      debugPrint('>>> Total events collected: ${allEvents.length}');
 
       // Sort events by start date (only if we have events)
       if (allEvents.isNotEmpty) {
@@ -274,13 +257,11 @@ class CalendarStore {
   /// Find event by title and approximate date
   /// Returns the event and the calendar ID where it was found
   static Future<Map<String, dynamic>?> _findEventByTitleAndDate(String title, DateTime date) async {
-    // ignore: avoid_print
-    print('>>> Searching for event: title="$title", date=${date.toIso8601String()}');
+    debugPrint('>>> Searching for event: title="$title", date=${date.toIso8601String()}');
     
     final calendarsResult = await _deviceCalendarPlugin.retrieveCalendars();
     if (!calendarsResult.isSuccess || calendarsResult.data == null) {
-      // ignore: avoid_print
-      print('>>> Failed to retrieve calendars for search');
+      debugPrint('>>> Failed to retrieve calendars for search');
       return null;
     }
 
@@ -288,8 +269,7 @@ class CalendarStore {
     final searchStart = date.subtract(const Duration(days: 1));
     final searchEnd = date.add(const Duration(days: 1));
     
-    // ignore: avoid_print
-    print('>>> Search range: ${searchStart.toIso8601String()} to ${searchEnd.toIso8601String()}');
+    debugPrint('>>> Search range: ${searchStart.toIso8601String()} to ${searchEnd.toIso8601String()}');
 
     final searchTitleLower = title.toLowerCase();
     int totalEventsChecked = 0;
@@ -311,8 +291,7 @@ class CalendarStore {
 
         if (eventsResult.isSuccess && eventsResult.data != null) {
           final events = eventsResult.data!;
-          // ignore: avoid_print
-          print('>>> Checking ${events.length} events in calendar ${calendar.name}');
+          debugPrint('>>> Checking ${events.length} events in calendar ${calendar.name}');
           
           for (final event in events) {
             try {
@@ -350,8 +329,7 @@ class CalendarStore {
                 
                 // Only consider events within 1 day
                 if (diff.inDays <= 1) {
-                  // ignore: avoid_print
-                  print('>>> Found matching title "${event.title}" at ${eventDate.toIso8601String()}, diff: ${diff.inHours} hours, priority: $matchPriority');
+                  debugPrint('>>> Found matching title "${event.title}" at ${eventDate.toIso8601String()}, diff: ${diff.inHours} hours, priority: $matchPriority');
                   
                   candidateEvents.add({
                     'event': event,
@@ -365,16 +343,14 @@ class CalendarStore {
               }
             } catch (e) {
               // Skip events that fail to parse
-              // ignore: avoid_print
-              print('>>> Error parsing event: $e');
+              debugPrint('>>> Error parsing event: $e');
               continue;
             }
           }
         }
       } catch (e) {
         // Continue with next calendar
-        // ignore: avoid_print
-        print('>>> Error searching calendar ${calendar.name}: $e');
+        debugPrint('>>> Error searching calendar ${calendar.name}: $e');
         continue;
       }
     }
@@ -391,8 +367,7 @@ class CalendarStore {
       
       final bestMatch = candidateEvents.first;
       final event = bestMatch['event'] as Event;
-      // ignore: avoid_print
-      print('>>> Selected best match: ${event.title} (id: ${event.eventId}) in calendar ${bestMatch['calendarName']}, time diff: ${bestMatch['dateDiffHours']} hours');
+      debugPrint('>>> Selected best match: ${event.title} (id: ${event.eventId}) in calendar ${bestMatch['calendarName']}, time diff: ${bestMatch['dateDiffHours']} hours');
       
       return {
         'event': event,
@@ -401,8 +376,7 @@ class CalendarStore {
       };
     }
     
-    // ignore: avoid_print
-    print('>>> Event not found. Checked $totalEventsChecked events across ${calendars.length} calendars, found ${candidateEvents.length} candidates');
+    debugPrint('>>> Event not found. Checked $totalEventsChecked events across ${calendars.length} calendars, found ${candidateEvents.length} candidates');
     return null;
   }
 
@@ -645,8 +619,7 @@ class CalendarStore {
         event = searchResult['event'] as Event;
         calendarId = searchResult['calendarId'] as String;
         
-        // ignore: avoid_print
-        print('>>> Found event in calendar: ${searchResult['calendarName']}');
+        debugPrint('>>> Found event in calendar: ${searchResult['calendarName']}');
       } else {
         return {
           'ok': false,
@@ -669,10 +642,8 @@ class CalendarStore {
         eventDuration = originalEnd.difference(originalStart);
       }
       
-      // ignore: avoid_print
-      print('>>> Updating event: ${event.title} (id: ${event.eventId})');
-      // ignore: avoid_print
-      print('>>> Original: start=${originalStart?.toIso8601String()}, end=${originalEnd?.toIso8601String()}, duration=$eventDuration');
+      debugPrint('>>> Updating event: ${event.title} (id: ${event.eventId})');
+      debugPrint('>>> Original: start=${originalStart?.toIso8601String()}, end=${originalEnd?.toIso8601String()}, duration=$eventDuration');
 
       // Update event fields
       if (title != null && title.isNotEmpty) {
@@ -719,12 +690,10 @@ class CalendarStore {
         if (event.start != null) {
           if (eventDuration != null) {
             event.end = event.start!.add(eventDuration);
-            // ignore: avoid_print
-            print('>>> Fixed end time by preserving duration: ${event.end?.toIso8601String()}');
+            debugPrint('>>> Fixed end time by preserving duration: ${event.end?.toIso8601String()}');
           } else {
             event.end = event.start!.add(const Duration(hours: 1));
-            // ignore: avoid_print
-            print('>>> Fixed end time by adding 1 hour: ${event.end?.toIso8601String()}');
+            debugPrint('>>> Fixed end time by adding 1 hour: ${event.end?.toIso8601String()}');
           }
         } else {
           return {
@@ -734,8 +703,7 @@ class CalendarStore {
         }
       }
       
-      // ignore: avoid_print
-      print('>>> Updated: start=${event.start?.toIso8601String()}, end=${event.end?.toIso8601String()}');
+      debugPrint('>>> Updated: start=${event.start?.toIso8601String()}, end=${event.end?.toIso8601String()}');
 
       // Ensure event has valid ID and calendar ID for update
       if (event.eventId == null || event.eventId!.isEmpty) {
@@ -747,8 +715,7 @@ class CalendarStore {
       
       event.calendarId = calendarId;
       
-      // ignore: avoid_print
-      print('>>> Updating event with ID: ${event.eventId}, calendar: $calendarId');
+      debugPrint('>>> Updating event with ID: ${event.eventId}, calendar: $calendarId');
       
       final updateResult = await _deviceCalendarPlugin.createOrUpdateEvent(event);
 
@@ -770,8 +737,7 @@ class CalendarStore {
       if (description != null) updatedFields.add('description');
       if (location != null) updatedFields.add('location');
       
-      // ignore: avoid_print
-      print('>>> Event updated successfully. Fields changed: ${updatedFields.join(", ")}');
+      debugPrint('>>> Event updated successfully. Fields changed: ${updatedFields.join(", ")}');
 
       return {
         'ok': true,
@@ -882,8 +848,7 @@ class CalendarStore {
         event = searchResult['event'] as Event;
         calendarId = searchResult['calendarId'] as String;
         
-        // ignore: avoid_print
-        print('>>> Found event to delete in calendar: ${searchResult['calendarName']}');
+        debugPrint('>>> Found event to delete in calendar: ${searchResult['calendarName']}');
       } else {
         return {
           'ok': false,
