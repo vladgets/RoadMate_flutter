@@ -48,10 +48,10 @@ app.post("/websearch", async (req, res) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: model || "gpt-4.1-mini",
+        model: model || "gpt-5-mini",
         input:
           "Search the web for accurate, up-to-date information for the query. " +
-          "Return 3-5 results as short snippets (1-2 sentences each) suitable for voice. " +
+          "Return up to 3 results as short snippets (1-3 sentences each) suitable for voice. " +
           "Prefer authoritative sources. Query: " +
           query,
         tools: [{ type: "web_search" }],
