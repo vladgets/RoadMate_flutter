@@ -43,7 +43,8 @@ class CalendarStore {
   }
 
   /// Tool-compatible wrapper: get calendar events
-  /// Returns events for the current date ±30 days
+  /// Returns events for the current date -7 + 30 days by default
+  /// Would be better to support date range configurable via args (not implemented yet)
   static Future<Map<String, dynamic>> toolGetCalendarData() async {
     try {
       // Check permissions
@@ -96,7 +97,7 @@ class CalendarStore {
 
       // Calculate date range: today ±30 days
       final now = DateTime.now();
-      final startDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 30));
+      final startDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7));
       final endDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 30));
 
       // Retrieve events from all calendars
