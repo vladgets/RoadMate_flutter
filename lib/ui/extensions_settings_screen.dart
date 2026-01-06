@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'calendar_store.dart';
+import '../services/calendar_store.dart';
 
 class ExtensionsSettingsScreen extends StatefulWidget {
   const ExtensionsSettingsScreen({super.key});

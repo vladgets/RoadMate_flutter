@@ -1,4 +1,4 @@
-import 'tools.dart';
+import 'services/extra_tools.dart';
 
 
 class Config {
@@ -17,6 +17,8 @@ If user asks about their calendar events, use calendar functions to fetch the co
 
 Memory: You can save facts to long-term memory with "memory_append" when user ask to remember things. 
 When user asks about their saved facts, retrieve them with "memory_fetch" and summarize concisely.
+
+WebSearch: Use WebSearch tool for up-to-date or verifiable real-world facts; otherwise answer from knowledge, and never invent facts beyond search results.
 
 Current date: {{CURRENT_DATE_READABLE}}
 ''';
@@ -74,7 +76,7 @@ Current date: {{CURRENT_DATE_READABLE}}
     {
       "type": "function",
       "name": "get_calendar_data",
-      "description": "Fetch user calendar data, vents from the past 30 days to the next 30 days.",
+      "description": "Fetch user calendar data.",
       "parameters": {
         "type": "object",
         "properties": {},
@@ -84,10 +86,25 @@ Current date: {{CURRENT_DATE_READABLE}}
     {
       "type": "function",
       "name": "get_current_time",
-      "description": "Returns the user's current local date and time as a human-readable string.",
+      "description": "Returns the user's current local date and time.",
       "parameters": {
         "type": "object",
         "properties": {}
+      }
+    },
+    // web search tool
+    {
+      "type": "function",
+      "name": "web_search",
+      "description": "Search the web for up-to-date real-world information.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+          }
+        },
+        "required": ["query"]
       }
     },
   ];
@@ -98,21 +115,21 @@ Current date: {{CURRENT_DATE_READABLE}}
     {
       "type": "function",
       "name": "create_calendar_event",
-      "description": "Create a new calendar event. Ask the user for title and start time (required), and optionally end time, description, and location. If end time is not provided, it defaults to start time + 1 hour.",
+      "description": "Create a new calendar event.",
       "parameters": {
         "type": "object",
         "properties": {
           "title": {
             "type": "string",
-            "description": "Event title (required)"
+            "description": "Event title"
           },
           "start": {
             "type": "string",
-            "description": "Start date and time in ISO 8601 format (required), e.g., '2025-12-15T14:00:00'"
+            "description": "Start date and time in ISO 8601 format"
           },
           "end": {
             "type": "string",
-            "description": "End date and time in ISO 8601 format (optional, defaults to start + 1 hour)"
+            "description": "End date and time in ISO 8601 format (optional)"
           },
           "description": {
             "type": "string",
@@ -122,10 +139,6 @@ Current date: {{CURRENT_DATE_READABLE}}
             "type": "string",
             "description": "Event location (optional)"
           },
-          "calendar_id": {
-            "type": "string",
-            "description": "Calendar ID to create event in (optional, uses default calendar if not provided)"
-          }
         },
         "required": ["title", "start"]
       }
@@ -133,7 +146,7 @@ Current date: {{CURRENT_DATE_READABLE}}
     {
       "type": "function",
       "name": "update_calendar_event",
-      "description": "Update an existing calendar event. You can find the event either by event_id or by searching with title and start_date. Then specify which fields to update.",
+      "description": "Update an existing calendar event.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -172,7 +185,7 @@ Current date: {{CURRENT_DATE_READABLE}}
     {
       "type": "function",
       "name": "delete_calendar_event",
-      "description": "Delete a calendar event. You can find the event either by event_id or by searching with title and start_date.",
+      "description": "Delete a calendar event.",
       "parameters": {
         "type": "object",
         "properties": {

@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
 import 'config.dart';
-import 'tools.dart';
-import 'memory_settings_screen.dart';
-import 'memory_store.dart';
-import 'extensions_settings_screen.dart';
-import 'calendar_store.dart';
+import 'ui/memory_settings_screen.dart';
+import 'ui/extensions_settings_screen.dart';
+import 'services/extra_tools.dart';
+import 'services/memory_store.dart';
+import 'services/calendar_store.dart';
+import 'services/web_search.dart';
 
 void main() => runApp(const MyApp());
 
@@ -36,6 +37,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   RTCDataChannel? _dc;
   MediaStream? _mic;
 
+  // Web search (reuse single instances)
+  late final WebSearchClient _webSearchClient = WebSearchClient();
+  late final WebSearchTool _webSearchTool = WebSearchTool(client: _webSearchClient);
+
   bool _connecting = false;
   bool _connected = false;
   String? _status;
@@ -46,6 +51,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
   @override
   void dispose() {
+    _webSearchClient.close();
     _disconnect();
     super.dispose();
   }
@@ -245,8 +251,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 /// Tool handlers map
  late final Map<String, Future<Map<String, dynamic>> Function(dynamic args)> _tools = {
    'get_current_location': (_) async {
-     final loc = await getCurrentLocation(); // <-- your implementation
-     return loc; // must be JSON-serializable Map
+     return await getCurrentLocation(); 
    },
   // Long-term memory tools
   'memory_append': (args) async {
@@ -271,6 +276,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   // Time and date tool
   'get_current_time': (_) async {
     return await getCurrentTime(); 
+  },
+  // Web search tool
+  'web_search': (args) async {
+    return await _webSearchTool.call(args);
   }
 };
 
@@ -458,6 +467,17 @@ class SettingsScreen extends StatelessWidget {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ExtensionsSettingsScreen()),
               );
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.science_outlined),
+            title: const Text('Testing'),
+            subtitle: const Text('Run WebSearch test (logs only)'),
+            trailing: const Icon(Icons.play_arrow),
+            onTap: () {
+              testWebSearch();
+              Navigator.of(context).maybePop();
             },
           ),
         ],

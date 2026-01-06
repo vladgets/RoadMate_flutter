@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'memory_store.dart';
+import '../services/memory_store.dart';
 
 class MemorySettingsScreen extends StatefulWidget {
   const MemorySettingsScreen({super.key});
