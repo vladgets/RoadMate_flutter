@@ -1,7 +1,10 @@
 import express from "express";
+import { registerGmailRoutes } from "./gmail.js";
 
 const app = express();
 app.use(express.json());
+registerGmailRoutes(app);
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 app.get("/token", async (req, res) => {

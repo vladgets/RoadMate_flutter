@@ -10,6 +10,8 @@ import 'services/extra_tools.dart';
 import 'services/memory_store.dart';
 import 'services/calendar_store.dart';
 import 'services/web_search.dart';
+import 'services/gmail_client.dart';
+
 
 void main() => runApp(const MyApp());
 
@@ -37,17 +39,20 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   RTCDataChannel? _dc;
   MediaStream? _mic;
 
+  // final String tokenServerUrl = "http://10.0.2.2:3000/token";
+  static const serverUrl = "https://roadmate-flutter.onrender.com";
+  static const tokenServerUrl = '$serverUrl/token';
+
   // Web search (reuse single instances)
   late final WebSearchClient _webSearchClient = WebSearchClient();
   late final WebSearchTool _webSearchTool = WebSearchTool(client: _webSearchClient);
+  // Gmail client
+  final gmailClient = GmailClient(baseUrl: serverUrl);
 
   bool _connecting = false;
   bool _connected = false;
   String? _status;
   String? _error;
-
-  // final String tokenServerUrl = "http://10.0.2.2:3000/token";
-  final String tokenServerUrl = "https://roadmate-flutter.onrender.com/token";
 
   @override
   void dispose() {

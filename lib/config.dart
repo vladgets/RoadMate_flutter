@@ -107,11 +107,45 @@ Current date: {{CURRENT_DATE_READABLE}}
         "required": ["query"]
       }
     },
+    // gmail search tool
+    {
+      "type": "function",
+      "name": "gmail_search",
+      "description": "Search Gmail using simple fields (voice-friendly). Returns a small list of email cards: from/subject/date/snippet.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string", "description": "Keywords to search for." },
+          "from": { "type": "string", "description": "Sender name or email (optional)." },
+          "subject": { "type": "string", "description": "Subject keywords (optional)." },
+          "unread_only": { "type": "boolean", "description": "If true, only unread emails." },
+          "in_inbox": { "type": "boolean", "description": "If true (default), search inbox only." },
+          "newer_than_days": { "type": "integer", "minimum": 1, "maximum": 365, "description": "Limit to recent emails." },
+          "max_results": { "type": "integer", "minimum": 1, "maximum": 10, "description": "How many emails to return." }
+        },
+        "required": []
+      }
+    }
   ];
 
 
   // Deprecated or currently unused tool definitions.
   static const List<Map<String, dynamic>> notUsedTools = [
+    // gmail read email tool
+    {
+      "type": "function",
+      "name": "gmail_read_email",
+      "description": "Read one email (metadata/snippet). Use after gmail_search_simple when user picks an email.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Email message id." }
+        },
+        "required": ["id"]
+      }
+    },
+
+    // calendar event management tools
     {
       "type": "function",
       "name": "create_calendar_event",
