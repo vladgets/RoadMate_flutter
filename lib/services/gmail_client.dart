@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 /// A compact “email card” suitable for voice UX.
 class GmailEmailCard {
@@ -131,7 +132,7 @@ class GmailClient {
   }
 
   /// Calls POST /gmail/search_structured
-  Future<GmailSearchResponse> searchSimple({
+  Future<GmailSearchResponse> searchStructured({
     String? text,
     String? from,
     String? subject,
@@ -150,6 +151,7 @@ class GmailClient {
       'max_results': maxResults,
     };
 
+    debugPrint('[GmailClient] searchStructured request body: ${jsonEncode(body)}');
     final r = await http.post(
       _u('/gmail/search_structured'),
       headers: await _headers(),
@@ -157,6 +159,7 @@ class GmailClient {
     );
 
     final data = jsonDecode(r.body) as Map<String, dynamic>;
+    debugPrint('[GmailClient] searchStructured response (${r.statusCode}): ${r.body}');
 
     if (r.statusCode < 200 || r.statusCode >= 300) {
       throw Exception('Gmail search failed (${r.statusCode}): ${data['error'] ?? r.body}');
@@ -168,8 +171,10 @@ class GmailClient {
   /// Calls GET /gmail/read?id=...
   Future<GmailReadResponse> readEmailMetadata({required String id}) async {
     final uri = _u('/gmail/read').replace(queryParameters: {'id': id});
+    debugPrint('[GmailClient] readEmailMetadata request: $uri');
     final r = await http.get(uri, headers: await _headers());
     final data = jsonDecode(r.body) as Map<String, dynamic>;
+    debugPrint('[GmailClient] readEmailMetadata response (${r.statusCode}): ${r.body}');
 
     if (r.statusCode < 200 || r.statusCode >= 300) {
       throw Exception('Gmail read failed (${r.statusCode}): ${data['error'] ?? r.body}');
@@ -189,7 +194,7 @@ class GmailSearchTool {
   /// args keys follow your tool schema:
   /// text, from, subject, unread_only, in_inbox, newer_than_days, max_results
   Future<Map<String, dynamic>> call(Map<String, dynamic> args) async {
-    final resp = await client.searchSimple(
+    final resp = await client.searchStructured(
       text: args['text'] as String?,
       from: args['from'] as String?,
       subject: args['subject'] as String?,

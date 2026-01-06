@@ -269,15 +269,6 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   'get_calendar_data': (_) async {
     return await CalendarStore.toolGetCalendarData();
   },
-  // 'create_calendar_event': (args) async {
-  //   return await CalendarStore.toolCreateCalendarEvent(args);
-  // },
-  // 'update_calendar_event': (args) async {
-  //   return await CalendarStore.toolUpdateCalendarEvent(args);
-  // },
-  // 'delete_calendar_event': (args) async {
-  //   return await CalendarStore.toolDeleteCalendarEvent(args);
-  // },
   // Time and date tool
   'get_current_time': (_) async {
     return await getCurrentTime(); 
@@ -285,7 +276,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   // Web search tool
   'web_search': (args) async {
     return await _webSearchTool.call(args);
-  }
+  },
+  'gmail_search': (args) async {
+    return await GmailSearchTool(client: gmailClient).call(args);
+  },
 };
 
 
