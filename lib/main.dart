@@ -34,14 +34,14 @@ class VoiceButtonPage extends StatefulWidget {
   State<VoiceButtonPage> createState() => _VoiceButtonPageState();
 }
 
+  // final String tokenServerUrl = "http://10.0.2.2:3000/token";
+  const serverUrl = "https://roadmate-flutter.onrender.com";
+  const tokenServerUrl = '$serverUrl/token';
+
 class _VoiceButtonPageState extends State<VoiceButtonPage> {
   RTCPeerConnection? _pc;
   RTCDataChannel? _dc;
   MediaStream? _mic;
-
-  // final String tokenServerUrl = "http://10.0.2.2:3000/token";
-  static const serverUrl = "https://roadmate-flutter.onrender.com";
-  static const tokenServerUrl = '$serverUrl/token';
 
   // Web search (reuse single instances)
   late final WebSearchClient _webSearchClient = WebSearchClient();
@@ -120,7 +120,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
       _dc!.onMessage = (RTCDataChannelMessage msg) {
         // You can log JSON events here for debugging.
-        debugPrint("OAI event: ${msg.text}");
+        // debugPrint("OAI event: ${msg.text}");
 
         // Best-effort parse and route.
         handleOaiEvent(msg.text);
@@ -303,10 +303,6 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
     try {
       final Map<String, dynamic> result = await toolHandler(args);
-      // Log calendar function results for debugging
-      if (toolName.contains('calendar')) {
-        debugPrint('>>> Calendar function ($toolName) result: ${jsonEncode(result)}');
-      }
       await _sendToolOutput(callId: callId, name: toolName, output: result);
     } catch (e) {
       debugPrint('>>> Tool execution error ($toolName): $e');
@@ -472,10 +468,10 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.science_outlined),
             title: const Text('Testing'),
-            subtitle: const Text('Run WebSearch test (logs only)'),
+            subtitle: const Text('Run Gmail test (logs only)'),
             trailing: const Icon(Icons.play_arrow),
             onTap: () {
-              testWebSearch();
+              testGmailClient(GmailClient(baseUrl: serverUrl));
               Navigator.of(context).maybePop();
             },
           ),

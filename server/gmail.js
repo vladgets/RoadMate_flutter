@@ -1,4 +1,3 @@
-// server/gmail.js
 import fs from "fs";
 import { google } from "googleapis";
 

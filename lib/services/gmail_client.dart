@@ -239,3 +239,41 @@ class GmailReadEmailTool {
     };
   }
 }
+
+
+
+/// Quick manual test you can call from your Settings menu.
+///
+/// It does NOT perform OAuth inside the app. OAuth must be completed in a browser
+/// by visiting: baseUrl/oauth/google/start (once), because the server stores the token.
+Future<void> testGmailClient(GmailClient client) async {
+  debugPrint('[GmailTest] Starting Gmail client test...');
+  // final client = GmailClient(baseUrl: "https://roadmate-flutter.onrender.com");
+  
+  try {
+    // Typical voice-friendly default: unread emails from last 7 days.
+    final resp = await client.searchStructured(
+      unreadOnly: true,
+      newerThanDays: 7,
+      maxResults: 5,
+    );
+
+    debugPrint('[GmailTest] Server query used: ${resp.query}');
+    debugPrint('[GmailTest] Emails returned: ${resp.results.length}');
+
+    for (final e in resp.results) {
+      debugPrint('---');
+      debugPrint('ID: ${e.id}');
+      debugPrint('FROM: ${e.from}');
+      debugPrint('SUBJECT: ${e.subject}');
+      debugPrint('DATE: ${e.date}');
+      debugPrint('SNIPPET: ${e.snippet}');
+    }
+
+    debugPrint('[GmailTest] Done.');
+  } catch (e) {
+    debugPrint('[GmailTest] FAILED: $e');
+    debugPrint('[GmailTest] If this is the first run, authorize Gmail in a browser:');
+    debugPrint('[GmailTest]   ${client.baseUrl}/oauth/google/start');
+  }
+}
