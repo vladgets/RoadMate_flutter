@@ -20,6 +20,7 @@ When user wants to create, update, or delete calendar events, ask clarifying que
 - For updating: event_id OR (title and start_date) to find the event, then ask what fields to update
 - For deleting: event_id OR (title and start_date) to find the event
 Always confirm the action before executing (e.g., "I'll create a meeting called X at Y time. Should I proceed?").
+CRITICAL: After the user confirms (says "yes", "ok", "да", "хорошо", etc.), you MUST IMMEDIATELY call the corresponding function (create_calendar_event, update_calendar_event, or delete_calendar_event). Do NOT just say you will do it - actually call the function right away. If you said you will update/delete/create an event, you must call the function in the same turn or immediately after confirmation.
 ''';
 
   static const String model = "gpt-realtime-mini-2025-12-15";

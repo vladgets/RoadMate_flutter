@@ -9,6 +9,9 @@ import 'memory_settings_screen.dart';
 import 'memory_store.dart';
 import 'extensions_settings_screen.dart';
 import 'calendar_store.dart';
+import 'tracking/tracking_manager.dart';
+import 'tracking/ui/tracking_settings_screen.dart';
+import 'tracking/ui/tracking_status_widget.dart';
 
 void main() => runApp(const MyApp());
 
@@ -43,6 +46,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
   // final String tokenServerUrl = "http://10.0.2.2:3000/token";
   final String tokenServerUrl = "https://roadmate-flutter.onrender.com/token";
+  
+  @override
+  void initState() {
+    super.initState();
+    // Инициализируем трекинг при старте приложения
+    TrackingManager.instance.initialize();
+  }
 
   @override
   void dispose() {
@@ -228,12 +238,22 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     if (item['type'] != 'function_call') return;
 
     // ignore: avoid_print
-    print(">>> Function call event: $item");
+    print("🔧 [FUNCTION_CALL] Event received: ${item['name']} (call_id: ${item['call_id'] ?? item['id']})");
+    // ignore: avoid_print
+    print("🔧 [FUNCTION_CALL] Full event: $item");
+    
     final callId = item['call_id'] ?? item['id'];
     final name = item['name'];
     final arguments = item['arguments'];
 
-    if (callId == null || name == null) return;
+    if (callId == null || name == null) {
+      // ignore: avoid_print
+      print("🔧 [FUNCTION_CALL] ERROR: Missing call_id or name. call_id=$callId, name=$name");
+      return;
+    }
+
+    // ignore: avoid_print
+    print("🔧 [FUNCTION_CALL] Executing: $name with args: $arguments");
 
     _executeToolCallFromEvent(
       {
@@ -260,16 +280,36 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   },
   // Calendar tools
   'get_calendar_data': (_) async {
-    return await CalendarStore.toolGetCalendarData();
+    // ignore: avoid_print
+    print('📅 [CALENDAR] get_calendar_data called');
+    final result = await CalendarStore.toolGetCalendarData();
+    // ignore: avoid_print
+    print('📅 [CALENDAR] get_calendar_data result: ${result['ok'] == true ? 'OK (${result['count'] ?? 0} events)' : 'ERROR: ${result['error']}'}');
+    return result;
   },
   'create_calendar_event': (args) async {
-    return await CalendarStore.toolCreateCalendarEvent(args);
+    // ignore: avoid_print
+    print('📅 [CALENDAR] create_calendar_event called with args: $args');
+    final result = await CalendarStore.toolCreateCalendarEvent(args);
+    // ignore: avoid_print
+    print('📅 [CALENDAR] create_calendar_event result: ${result['ok'] == true ? 'OK (event_id: ${result['event_id']})' : 'ERROR: ${result['error']}'}');
+    return result;
   },
   'update_calendar_event': (args) async {
-    return await CalendarStore.toolUpdateCalendarEvent(args);
+    // ignore: avoid_print
+    print('📅 [CALENDAR] update_calendar_event called with args: $args');
+    final result = await CalendarStore.toolUpdateCalendarEvent(args);
+    // ignore: avoid_print
+    print('📅 [CALENDAR] update_calendar_event result: ${result['ok'] == true ? 'OK (event_id: ${result['event_id']}, updated: ${result['updated_fields'] ?? []})' : 'ERROR: ${result['error']}'}');
+    return result;
   },
   'delete_calendar_event': (args) async {
-    return await CalendarStore.toolDeleteCalendarEvent(args);
+    // ignore: avoid_print
+    print('📅 [CALENDAR] delete_calendar_event called with args: $args');
+    final result = await CalendarStore.toolDeleteCalendarEvent(args);
+    // ignore: avoid_print
+    print('📅 [CALENDAR] delete_calendar_event result: ${result['ok'] == true ? 'OK (event_id: ${result['event_id']})' : 'ERROR: ${result['error']}'}');
+    return result;
   },
 };
 
@@ -279,7 +319,15 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   Future<void> _executeToolCallFromEvent(Map<String, dynamic> evt) async {
     final String? callId = evt['call_id'];
     final String? toolName = evt['name'];
-    if (callId == null || toolName == null || toolName.isEmpty) return;
+    
+    // ignore: avoid_print
+    print("🔧 [EXECUTE] Starting execution: tool=$toolName, call_id=$callId");
+    
+    if (callId == null || toolName == null || toolName.isEmpty) {
+      // ignore: avoid_print
+      print("🔧 [EXECUTE] ERROR: Missing call_id or toolName. call_id=$callId, toolName=$toolName");
+      return;
+    }
 
     dynamic args = evt['arguments'];
     if (args == '') {
@@ -290,7 +338,11 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     }
 
     final toolHandler = _tools[toolName];
-    if (toolHandler == null) return;
+    if (toolHandler == null) {
+      // ignore: avoid_print
+      print("🔧 [EXECUTE] ERROR: No handler found for tool: $toolName");
+      return;
+    }
 
     try {
       final Map<String, dynamic> result = await toolHandler(args);
@@ -369,12 +421,15 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
         ],
       ),
       body: SafeArea(
-        child: Center(
+        child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // Tracking Status Widget
+                const TrackingStatusWidget(),
+                const SizedBox(height: 24),
                 Text(
                   _status ?? (isBusy ? "Working…" : "Ready."),
                   textAlign: TextAlign.center,
@@ -462,6 +517,27 @@ class SettingsScreen extends StatelessWidget {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ExtensionsSettingsScreen()),
               );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.location_on),
+            title: const Text('Location Tracking'),
+            subtitle: const Text('Manage location tracking and view history'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              final database = TrackingManager.instance.database;
+              if (database != null) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => TrackingSettingsScreen(
+                      database: database,
+                      onTrackingToggled: () {
+                        // TrackingStatusWidget обновляется автоматически через таймер
+                      },
+                    ),
+                  ),
+                );
+              }
             },
           ),
         ],
