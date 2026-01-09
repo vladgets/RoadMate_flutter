@@ -145,6 +145,73 @@ function compactSnippet(s, maxLen = 180) {
   return t.slice(0, maxLen - 1) + "…";
 }
 
+function b64urlToString(data) {
+  if (!data || typeof data !== "string") return "";
+  // Gmail uses base64url without padding.
+  const b64 = data.replace(/-/g, "+").replace(/_/g, "/");
+  const padLen = (4 - (b64.length % 4)) % 4;
+  const padded = b64 + "=".repeat(padLen);
+  return Buffer.from(padded, "base64").toString("utf-8");
+}
+
+function stripHtml(html) {
+  const s = String(html || "");
+  // Very simple HTML to text: remove script/style, tags, decode common entities.
+  const noScripts = s
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ");
+  const noTags = noScripts.replace(/<[^>]+>/g, " ");
+  return noTags
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function collectParts(payload, out = []) {
+  if (!payload) return out;
+  out.push(payload);
+  const parts = payload.parts || [];
+  for (const p of parts) collectParts(p, out);
+  return out;
+}
+
+function extractBodyTextFromMessage(msg, maxChars = 12000) {
+  const payload = msg?.payload;
+  if (!payload) return "";
+
+  const parts = collectParts(payload);
+
+  // Prefer text/plain
+  for (const p of parts) {
+    if (p?.mimeType === "text/plain" && p?.body?.data) {
+      const t = b64urlToString(p.body.data);
+      if (t) return t.length > maxChars ? t.slice(0, maxChars) + "…" : t;
+    }
+  }
+
+  // Fallback to text/html
+  for (const p of parts) {
+    if (p?.mimeType === "text/html" && p?.body?.data) {
+      const html = b64urlToString(p.body.data);
+      const txt = stripHtml(html);
+      if (txt) return txt.length > maxChars ? txt.slice(0, maxChars) + "…" : txt;
+    }
+  }
+
+  // Last resort: top-level body
+  if (payload?.body?.data) {
+    const t = b64urlToString(payload.body.data);
+    if (t) return t.length > maxChars ? t.slice(0, maxChars) + "…" : t;
+  }
+
+  return "";
+}
+
 
 //
 // Exposed APIs
@@ -342,6 +409,99 @@ export function registerGmailRoutes(app) {
     }
   });
 
+  // Read Gmail (full body text)
+  app.get("/gmail/read_full", async (req, res) => {
+    try {
+      const clientId = getClientIdFromReq(req);
+      if (!clientId) {
+        return res.status(400).json({ ok: false, error: "Missing or invalid client_id. Provide header X-Client-Id or ?client_id=..." });
+      }
+
+      const id = req.query.id;
+      if (!id || typeof id !== "string") {
+        return res.status(400).json({ ok: false, error: "Missing required query param: id" });
+      }
+
+      const auth = await getAuthorizedClient(clientId);
+      const gmail = google.gmail({ version: "v1", auth });
+
+      const r = await gmail.users.messages.get({
+        userId: "me",
+        id,
+        format: "full",
+      });
+
+      const msg = r.data;
+      const headers = msg.payload?.headers || [];
+      const h = Object.fromEntries(headers.map((x) => [String(x.name || "").toLowerCase(), x.value || ""]));
+
+      const body_text = extractBodyTextFromMessage(msg);
+
+      return res.json({
+        ok: true,
+        id: msg.id,
+        threadId: msg.threadId,
+        subject: h["subject"] || "",
+        from: h["from"] || "",
+        date: h["date"] || "",
+        snippet: msg.snippet || "",
+        body_text,
+      });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e) });
+    }
+  });
+
+  // Read Gmail thread (whole conversation)
+  app.get("/gmail/thread", async (req, res) => {
+    try {
+      const clientId = getClientIdFromReq(req);
+      if (!clientId) {
+        return res.status(400).json({ ok: false, error: "Missing or invalid client_id. Provide header X-Client-Id or ?client_id=..." });
+      }
+
+      const id = req.query.id;
+      if (!id || typeof id !== "string") {
+        return res.status(400).json({ ok: false, error: "Missing required query param: id (threadId)" });
+      }
+
+      const auth = await getAuthorizedClient(clientId);
+      const gmail = google.gmail({ version: "v1", auth });
+
+      const r = await gmail.users.threads.get({
+        userId: "me",
+        id,
+        format: "full",
+      });
+
+      const thread = r.data;
+      const messages = thread.messages || [];
+
+      const items = messages.map((m) => {
+        const headers = m.payload?.headers || [];
+        const h = Object.fromEntries(headers.map((x) => [String(x.name || "").toLowerCase(), x.value || ""]));
+        return {
+          id: m.id,
+          threadId: m.threadId,
+          subject: h["subject"] || "",
+          from: h["from"] || "",
+          date: h["date"] || "",
+          snippet: m.snippet || "",
+          body_text: extractBodyTextFromMessage(m, 6000),
+        };
+      });
+
+      return res.json({
+        ok: true,
+        threadId: thread.id,
+        historyId: thread.historyId || null,
+        message_count: items.length,
+        messages: items,
+      });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e) });
+    }
+  });
 
 
 }
