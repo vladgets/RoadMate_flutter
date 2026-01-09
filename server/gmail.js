@@ -115,8 +115,8 @@ function cleanText(v) {
 function buildGmailQuery({ text, from, subject, unread_only, in_inbox, newer_than_days }) {
   const parts = [];
 
-  // Default to inbox for voice use unless explicitly disabled
-  if (in_inbox !== false) parts.push("in:inbox");
+  // Default not to inbox for voice use
+  if (in_inbox !== true) parts.push("in:inbox");
   if (unread_only === true) parts.push("is:unread");
 
   const fromText = cleanText(from);

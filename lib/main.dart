@@ -37,17 +37,14 @@ class VoiceButtonPage extends StatefulWidget {
 }
 
   // final String tokenServerUrl = "http://10.0.2.2:3000/token";
-  const serverUrl = "https://roadmate-flutter.onrender.com";
-  const tokenServerUrl = '$serverUrl/token';
-
-  const _prefKeyClientId = 'roadmate_client_id';
+  const tokenServerUrl = '${Config.serverUrl}/token';
 
 /// Persistent per-install client id used for server-side token partitioning (Gmail, etc.).
 /// No extra deps: uses Random.secure + base64url.
 class ClientIdStore {
   static Future<String> getOrCreate() async {
     final prefs = await SharedPreferences.getInstance();
-    final existing = prefs.getString(_prefKeyClientId);
+    final existing = prefs.getString(Config.prefKeyClientId);
     if (existing != null && existing.isNotEmpty) return existing;
 
     // 16 bytes -> 22 chars base64url without padding (roughly)
@@ -55,7 +52,7 @@ class ClientIdStore {
     final bytes = List<int>.generate(16, (_) => rnd.nextInt(256));
     final cid = base64UrlEncode(bytes).replaceAll('=', '');
 
-    await prefs.setString(_prefKeyClientId, cid);
+    await prefs.setString(Config.prefKeyClientId, cid);
     return cid;
   }
 }
@@ -80,7 +77,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // Ensure we have a stable client id for Gmail token storage on the server.
     ClientIdStore.getOrCreate().then((cid) {
       _clientId = cid;
-      gmailClient = GmailClient(baseUrl: serverUrl, clientId: cid);
+      gmailClient = GmailClient(baseUrl: Config.serverUrl, clientId: cid);
       debugPrint('[ClientId] $cid');
       if (mounted) setState(() {});
     });
@@ -513,7 +510,7 @@ class SettingsScreen extends StatelessWidget {
             trailing: const Icon(Icons.play_arrow),
             onTap: () {
               ClientIdStore.getOrCreate().then((cid) {
-                testGmailClient(GmailClient(baseUrl: serverUrl, clientId: cid));
+                testGmailClient(GmailClient(baseUrl: Config.serverUrl, clientId: cid));
               });
               Navigator.of(context).maybePop();
             },

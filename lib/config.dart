@@ -28,6 +28,10 @@ Current date: {{CURRENT_DATE_READABLE}}
   static const String model = "gpt-realtime-mini-2025-12-15";
   static const String voice = "marin";
 
+  // Our server URL and preference keys
+  static const serverUrl = "https://roadmate-flutter.onrender.com";
+  static const prefKeyClientId = 'roadmate_client_id';
+
 
   /// Build the system prompt with the current readable date
   static String buildSystemPrompt() {
@@ -121,7 +125,7 @@ Current date: {{CURRENT_DATE_READABLE}}
           "from": { "type": "string", "description": "Sender name or email (optional)." },
           "subject": { "type": "string", "description": "Subject keywords (optional)." },
           "unread_only": { "type": "boolean", "description": "If true, only unread emails." },
-          "in_inbox": { "type": "boolean", "description": "If true (default), search inbox only." },
+          "in_inbox": { "type": "boolean", "description": "If true, search inbox only." },
           "newer_than_days": { "type": "integer", "minimum": 1, "maximum": 365, "description": "Limit to recent emails." },
           "max_results": { "type": "integer", "minimum": 1, "maximum": 10, "description": "How many emails to return." }
         },

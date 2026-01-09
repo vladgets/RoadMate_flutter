@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/calendar_store.dart';
 import '../services/gmail_client.dart';
+import '../config.dart';
 
 class ExtensionsSettingsScreen extends StatefulWidget {
   const ExtensionsSettingsScreen({super.key});
@@ -23,8 +24,6 @@ class _ExtensionsSettingsScreenState extends State<ExtensionsSettingsScreen> {
 
   static const String _prefKeyCalendarEnabled = 'calendar_extension_enabled';
   static const String _prefKeyGmailEnabled = 'gmail_extension_enabled';
-  static const String _serverBaseUrl = 'https://roadmate-flutter.onrender.com';
-  static const String _prefKeyClientId = 'roadmate_client_id';
 
   @override
   void initState() {
@@ -37,14 +36,14 @@ class _ExtensionsSettingsScreenState extends State<ExtensionsSettingsScreen> {
     setState(() {
       _calendarEnabled = prefs.getBool(_prefKeyCalendarEnabled) ?? false;
       _gmailEnabled = prefs.getBool(_prefKeyGmailEnabled) ?? false;
-      _clientId = prefs.getString(_prefKeyClientId);
+      _clientId = prefs.getString(Config.prefKeyClientId);
     });
     await _checkCalendarPermissions();
     await _checkGmailAuthorization();
   }
 
   GmailClient _gmailClient() {
-    return GmailClient(baseUrl: _serverBaseUrl, clientId: _clientId);
+    return GmailClient(baseUrl: Config.serverUrl, clientId: _clientId);
   }
 
   Future<void> _checkGmailAuthorization() async {
@@ -100,7 +99,7 @@ class _ExtensionsSettingsScreenState extends State<ExtensionsSettingsScreen> {
       }
       return;
     }
-    final uri = Uri.parse('$_serverBaseUrl/oauth/google/start?client_id=$_clientId');
+    final uri = Uri.parse('${Config.serverUrl}/oauth/google/start?client_id=$_clientId');
 
     final ok = await launchUrl(
       uri,
@@ -320,7 +319,7 @@ class _ExtensionsSettingsScreenState extends State<ExtensionsSettingsScreen> {
               child: Text(
                 _clientId == null || _clientId!.isEmpty
                     ? 'Client id not initialized yet. Restart the app.'
-                    : 'Authorize Gmail in a browser: $_serverBaseUrl/oauth/google/start?client_id=$_clientId',
+                    : 'Authorize Gmail in a browser: ${Config.serverUrl}/oauth/google/start?client_id=$_clientId',
                 style: TextStyle(
                   color: Colors.orange.shade700,
                   fontSize: 12,
