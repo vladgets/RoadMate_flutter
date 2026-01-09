@@ -55,6 +55,12 @@ function makeOAuth2Client() {
 }
 
 function saveToken(clientId, token) {
+  if (!clientId) {
+    throw new Error("saveToken: missing clientId");
+  }
+  if (!token || typeof token !== "object") {
+    throw new Error(`saveToken: missing token for client_id=${clientId}`);
+  }  
   const p = tokenPathFor(clientId);
   fs.writeFileSync(p, JSON.stringify(token, null, 2), "utf-8");
 }
@@ -80,7 +86,9 @@ async function getAuthorizedClient(clientId) {
 
   // Save updated tokens (sometimes Google returns a new access token).
   const updated = oauth2.credentials;
-  if (updated) saveToken(updated);
+  if (updated && Object.keys(updated).length > 0) {
+    saveToken(clientId, updated);
+  }
 
   return oauth2;
 }
@@ -188,7 +196,7 @@ export function registerGmailRoutes(app) {
       oauth2.setCredentials(tokens);
 
       // Save tokens for later Gmail calls
-      saveToken(clientId, oauth2.credentials);
+      saveToken(clientId, tokens);
 
       return res.json({ ok: true, client_id: clientId, message: "Gmail authorized. You can close this tab." });
     } catch (e) {
