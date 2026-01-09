@@ -109,9 +109,16 @@ class GmailClient {
   /// Optionally pass an auth token you use for your own server (if you add one).
   final Future<String?> Function()? getServerAuthToken;
 
+  /// Client-provided unique id used by the server to select the right Gmail token file.
+  /// Provide either `clientId` or `getClientId`.
+  final String? clientId;
+  final Future<String?> Function()? getClientId;
+
   const GmailClient({
     required this.baseUrl,
     this.getServerAuthToken,
+    this.clientId,
+    this.getClientId,    
   });
 
   Uri _u(String path) => Uri.parse('$baseUrl$path');
@@ -126,6 +133,11 @@ class GmailClient {
       if (token != null && token.isNotEmpty) {
         h['Authorization'] = 'Bearer $token';
       }
+    }
+
+    final cid = clientId ?? (getClientId != null ? await getClientId!() : null);
+    if (cid != null && cid.isNotEmpty) {
+      h['X-Client-Id'] = cid;
     }
 
     return h;
@@ -274,6 +286,10 @@ Future<void> testGmailClient(GmailClient client) async {
   } catch (e) {
     debugPrint('[GmailTest] FAILED: $e');
     debugPrint('[GmailTest] If this is the first run, authorize Gmail in a browser:');
-    debugPrint('[GmailTest]   ${client.baseUrl}/oauth/google/start');
+    final cid = client.clientId;
+    final authUrl = (cid != null && cid.isNotEmpty)
+        ? '${client.baseUrl}/oauth/google/start?client_id=$cid'
+        : '${client.baseUrl}/oauth/google/start?client_id=<YOUR_CLIENT_ID>';
+    debugPrint('[GmailTest]   $authUrl');
   }
 }

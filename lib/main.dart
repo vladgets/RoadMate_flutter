@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'config.dart';
 import 'ui/memory_settings_screen.dart';
 import 'ui/extensions_settings_screen.dart';
@@ -38,6 +40,27 @@ class VoiceButtonPage extends StatefulWidget {
   const serverUrl = "https://roadmate-flutter.onrender.com";
   const tokenServerUrl = '$serverUrl/token';
 
+  const _prefKeyClientId = 'roadmate_client_id';
+
+/// Persistent per-install client id used for server-side token partitioning (Gmail, etc.).
+/// No extra deps: uses Random.secure + base64url.
+class ClientIdStore {
+  static Future<String> getOrCreate() async {
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getString(_prefKeyClientId);
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    // 16 bytes -> 22 chars base64url without padding (roughly)
+    final rnd = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rnd.nextInt(256));
+    final cid = base64UrlEncode(bytes).replaceAll('=', '');
+
+    await prefs.setString(_prefKeyClientId, cid);
+    return cid;
+  }
+}
+
+
 class _VoiceButtonPageState extends State<VoiceButtonPage> {
   RTCPeerConnection? _pc;
   RTCDataChannel? _dc;
@@ -46,8 +69,22 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   // Web search (reuse single instances)
   late final WebSearchClient _webSearchClient = WebSearchClient();
   late final WebSearchTool _webSearchTool = WebSearchTool(client: _webSearchClient);
-  // Gmail client
-  final gmailClient = GmailClient(baseUrl: serverUrl);
+
+    // Gmail client (multi-user): initialized with per-install client id.
+  late final GmailClient gmailClient;
+  String? _clientId;
+
+  @override
+  void initState() {
+    super.initState();
+    // Ensure we have a stable client id for Gmail token storage on the server.
+    ClientIdStore.getOrCreate().then((cid) {
+      _clientId = cid;
+      gmailClient = GmailClient(baseUrl: serverUrl, clientId: cid);
+      debugPrint('[ClientId] $cid');
+      if (mounted) setState(() {});
+    });
+  }
 
   bool _connecting = false;
   bool _connected = false;
@@ -278,6 +315,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     return await _webSearchTool.call(args);
   },
   'gmail_search': (args) async {
+    // If client id / gmail client isn't ready yet, fail fast with a clear error.
+    if (_clientId == null) {
+      throw Exception('Gmail is not initialized yet (client id missing). Try again in a second.');
+    }
     return await GmailSearchTool(client: gmailClient).call(args);
   },
 };
@@ -471,7 +512,9 @@ class SettingsScreen extends StatelessWidget {
             subtitle: const Text('Run Gmail test (logs only)'),
             trailing: const Icon(Icons.play_arrow),
             onTap: () {
-              testGmailClient(GmailClient(baseUrl: serverUrl));
+              ClientIdStore.getOrCreate().then((cid) {
+                testGmailClient(GmailClient(baseUrl: serverUrl, clientId: cid));
+              });
               Navigator.of(context).maybePop();
             },
           ),

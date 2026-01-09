@@ -19,11 +19,12 @@ class _ExtensionsSettingsScreenState extends State<ExtensionsSettingsScreen> {
   bool _gmailEnabled = false;
   bool _gmailAuthorized = false;
   bool _gmailChecking = false;
-
+  String? _clientId;
 
   static const String _prefKeyCalendarEnabled = 'calendar_extension_enabled';
   static const String _prefKeyGmailEnabled = 'gmail_extension_enabled';
   static const String _serverBaseUrl = 'https://roadmate-flutter.onrender.com';
+  static const String _prefKeyClientId = 'roadmate_client_id';
 
   @override
   void initState() {
@@ -36,16 +37,23 @@ class _ExtensionsSettingsScreenState extends State<ExtensionsSettingsScreen> {
     setState(() {
       _calendarEnabled = prefs.getBool(_prefKeyCalendarEnabled) ?? false;
       _gmailEnabled = prefs.getBool(_prefKeyGmailEnabled) ?? false;
+      _clientId = prefs.getString(_prefKeyClientId);
     });
     await _checkCalendarPermissions();
     await _checkGmailAuthorization();
   }
 
   GmailClient _gmailClient() {
-    return const GmailClient(baseUrl: _serverBaseUrl);
+    return GmailClient(baseUrl: _serverBaseUrl, clientId: _clientId);
   }
 
   Future<void> _checkGmailAuthorization() async {
+    if (_clientId == null || _clientId!.isEmpty) {
+      setState(() {
+        _gmailAuthorized = false;
+      });
+      return;
+    }
     if (_gmailChecking) return;
     setState(() {
       _gmailChecking = true;
@@ -81,7 +89,19 @@ class _ExtensionsSettingsScreenState extends State<ExtensionsSettingsScreen> {
   }
 
   Future<void> _authorizeGmailInBrowser() async {
-    final uri = Uri.parse('$_serverBaseUrl/oauth/google/start');
+    if (_clientId == null || _clientId!.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Client id is not initialized yet. Please restart the app.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+    final uri = Uri.parse('$_serverBaseUrl/oauth/google/start?client_id=$_clientId');
+
     final ok = await launchUrl(
       uri,
       mode: LaunchMode.externalApplication,
@@ -262,11 +282,13 @@ class _ExtensionsSettingsScreenState extends State<ExtensionsSettingsScreen> {
             leading: const Icon(Icons.mail_outline),
             title: const Text('Gmail'),
             subtitle: Text(
-              _gmailChecking
-                  ? 'Checking authorization…'
-                  : (_gmailAuthorized
-                      ? 'Authorized on server'
-                      : 'Not authorized (tap Authorize)')
+              _clientId == null || _clientId!.isEmpty
+                  ? 'Client id not initialized'
+                  : (_gmailChecking
+                      ? 'Checking authorization…'
+                      : (_gmailAuthorized
+                          ? 'Authorized on server'
+                          : 'Not authorized (tap Authorize)')),
             ),
             trailing: _loading
                 ? const SizedBox(
@@ -296,7 +318,9 @@ class _ExtensionsSettingsScreenState extends State<ExtensionsSettingsScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Text(
-                'Authorize Gmail in a browser: $_serverBaseUrl/oauth/google/start',
+                _clientId == null || _clientId!.isEmpty
+                    ? 'Client id not initialized yet. Restart the app.'
+                    : 'Authorize Gmail in a browser: $_serverBaseUrl/oauth/google/start?client_id=$_clientId',
                 style: TextStyle(
                   color: Colors.orange.shade700,
                   fontSize: 12,
@@ -308,4 +332,3 @@ class _ExtensionsSettingsScreenState extends State<ExtensionsSettingsScreen> {
     );
   }
 }
-
