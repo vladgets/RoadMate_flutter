@@ -126,7 +126,10 @@ function buildGmailQuery({ text, from, subject, unread_only, in_inbox, newer_tha
   if (subjectText) parts.push(`subject:(${subjectText})`);
 
   const nd = clampInt(newer_than_days, { min: 1, max: 365 });
-  if (nd != null) parts.push(`newer_than:${nd}d`);
+  if (nd != null) 
+    parts.push(`newer_than:${nd}d`);
+  else
+    parts.push(`newer_than:7d`); // default to recent emails
 
   const free = cleanText(text);
   if (free) parts.push(free);

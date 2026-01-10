@@ -67,9 +67,12 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   late final WebSearchClient _webSearchClient = WebSearchClient();
   late final WebSearchTool _webSearchTool = WebSearchTool(client: _webSearchClient);
 
-    // Gmail client (multi-user): initialized with per-install client id.
+  // Gmail client (multi-user): initialized with per-install client id.
   late final GmailClient gmailClient;
   String? _clientId;
+
+  // Deduplicate tool calls (Realtime may emit in_progress + completed, and can resend events).
+  final Set<String> _handledToolCallIds = <String>{};
 
   @override
   void initState() {
@@ -241,6 +244,9 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       _dc = null;
       _pc = null;
       _mic = null;
+      // Clear handled tool calls so a new session can reuse call ids safely.
+      _handledToolCallIds.clear();
+
       if (mounted) {
         setState(() {
           _connected = false;
@@ -270,22 +276,35 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     if (item is! Map<String, dynamic>) return;
     if (item['type'] != 'function_call') return;
 
-    debugPrint(">>> Function call event: $item");
-    final callId = item['call_id'] ?? item['id'];
-    final name = item['name'];
+    // Realtime often emits in_progress events with empty arguments and then a completed event.
+    // Only execute when completed.
+    final status = item['status'];
+    if (status != 'completed') {
+      debugPrint(">>> Function call event (ignored, status=$status): {name: ${item['name']}, call_id: ${item['call_id'] ?? item['id']}}");
+      return;
+    }
+
+    final callId = (item['call_id'] ?? item['id'])?.toString();
+    final name = item['name']?.toString();
     final arguments = item['arguments'];
 
     if (callId == null || name == null) return;
 
-    _executeToolCallFromEvent(
-      {
-        'call_id': callId,
-        'name': name,
-        'arguments': arguments,
-      }
-    );
-  }
+    // Deduplicate: sometimes the same completed call is delivered more than once.
+    if (_handledToolCallIds.contains(callId)) {
+      debugPrint(">>> Function call event (duplicate ignored): $name (call_id=$callId)");
+      return;
+    }
+    _handledToolCallIds.add(callId);
 
+    debugPrint(">>> Function call event (completed): $item");
+
+    _executeToolCallFromEvent({
+      'call_id': callId,
+      'name': name,
+      'arguments': arguments,
+    });
+  }
 
 /// Tool handlers map
  late final Map<String, Future<Map<String, dynamic>> Function(dynamic args)> _tools = {
