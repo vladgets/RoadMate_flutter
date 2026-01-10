@@ -355,6 +355,7 @@ export function registerGmailRoutes(app) {
           return {
             id: msg.id,
             threadId: msg.threadId,
+            internalDate: Number(msg.internalDate || 0),
             subject: h["subject"] || "",
             from: h["from"] || "",
             date: h["date"] || "",
@@ -363,7 +364,45 @@ export function registerGmailRoutes(app) {
         })
       );
 
-      return res.json({ ok: true, query: q, results: cards });
+      // Collapse to one candidate per thread: pick the latest message among matches.
+      const byThread = new Map();
+      for (const c of cards) {
+        const key = c.threadId || c.id;
+        const prev = byThread.get(key);
+        if (!prev) {
+          byThread.set(key, { best: c, count: 1 });
+        } else {
+          prev.count += 1;
+          const prevDate = Number(prev.best.internalDate || 0);
+          const curDate = Number(c.internalDate || 0);
+          if (curDate >= prevDate) {
+            prev.best = c;
+          }
+        }
+      }
+
+      const collapsed = Array.from(byThread.values())
+        .map(({ best, count }) => ({
+          id: best.id,
+          threadId: best.threadId,
+          subject: best.subject,
+          from: best.from,
+          date: best.date,
+          // Thread "summary": show how many matched messages we saw, plus the latest snippet.
+          matched_count: count,
+          snippet: count > 1 ? `(${count} msgs) ${best.snippet}` : best.snippet,
+        }))
+        // Sort newest first (best-effort using internalDate we captured)
+        .sort((a, b) => {
+          const ad = Number((cards.find((x) => x.id === a.id)?.internalDate) || 0);
+          const bd = Number((cards.find((x) => x.id === b.id)?.internalDate) || 0);
+          return bd - ad;
+        });
+
+      // Respect maxResults as a limit on threads returned.
+      const results = collapsed.slice(0, maxResults);
+
+      return res.json({ ok: true, query: q, results });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e) });
     }

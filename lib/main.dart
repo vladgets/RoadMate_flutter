@@ -318,6 +318,12 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     }
     return await GmailSearchTool(client: gmailClient).call(args);
   },
+  'gmail_read_email': (args) async {
+    if (_clientId == null) {
+      throw Exception('Gmail is not initialized yet (client id missing). Try again in a second.');
+    }
+    return await GmailReadEmailTool(client: gmailClient).call(args);
+  },
 };
 
 
@@ -369,7 +375,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       'item': {
         'type': 'function_call_output',
         'call_id': callId,
-        // 'name': name,
+        'name': name,
         'output': jsonEncode(output),
       },
     };
@@ -378,6 +384,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
     // Ask the model to continue after receiving the tool output.
     dc.send(RTCDataChannelMessage(jsonEncode({'type': 'response.create'})));
+    debugPrint('>>> Sent tool output: $name (call_id=$callId)');
   }
 
 

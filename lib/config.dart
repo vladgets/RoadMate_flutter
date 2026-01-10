@@ -113,7 +113,7 @@ Current date: {{CURRENT_DATE_READABLE}}
         "required": ["query"]
       }
     },
-    // gmail search tool
+    // gmail tools
     {
       "type": "function",
       "name": "gmail_search",
@@ -131,17 +131,11 @@ Current date: {{CURRENT_DATE_READABLE}}
         },
         "required": []
       }
-    }
-  ];
-
-
-  // Deprecated or currently unused tool definitions.
-  static const List<Map<String, dynamic>> notUsedTools = [
-    // gmail read email tool
+    },
     {
       "type": "function",
       "name": "gmail_read_email",
-      "description": "Read one email (metadata/snippet). Use after gmail_search_simple when user picks an email.",
+      "description": "Read one email. Use after gmail_search when user picks an email.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -150,7 +144,11 @@ Current date: {{CURRENT_DATE_READABLE}}
         "required": ["id"]
       }
     },
+  ];
 
+
+  // Deprecated or currently unused tool definitions.
+  static const List<Map<String, dynamic>> notUsedTools = [
     // calendar event management tools
     {
       "type": "function",
