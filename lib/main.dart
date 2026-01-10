@@ -212,7 +212,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       "tools": Config.tools,
       "tool_choice": "auto",
       "audio": {
-        "input": {"turn_detection": {"type": "server_vad"}},
+        "input": {
+          "turn_detection": {"type": "server_vad"},
+          "transcription": {"model": "gpt-4o-mini-transcribe"}
+        },
         "output": {"voice": Config.voice},
       }
     });
@@ -270,10 +273,31 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       return; // Ignore non-JSON messages
     }
 
+    // debugPrint("Event: $evt");
+    final evtType = evt['type']?.toString();
+
+    // User and Assistant messages logging
+    if (evtType == 'conversation.item.input_audio_transcription.completed') {
+      final transcript = evt['transcript'];
+      if (transcript is String && transcript.trim().isNotEmpty) {
+        debugPrint('🧑 User said: ${transcript.trim()}');
+      }
+      return;
+    }
+
+    if (evtType == 'response.output_audio_transcript.done') {
+      final transcript = evt['transcript'];
+      if (transcript is String && transcript.trim().isNotEmpty) {
+        debugPrint('🤖 Assistant said: ${transcript.trim()}');
+      }
+      return;
+    }
+
+    // From here on we only handle events that include a conversation item.
     final item = evt['item'];
+    if (item is! Map<String, dynamic>) return;
 
     // We only care about function/tool calls
-    if (item is! Map<String, dynamic>) return;
     if (item['type'] != 'function_call') return;
 
     // Realtime often emits in_progress events with empty arguments and then a completed event.
@@ -344,7 +368,6 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     return await GmailReadEmailTool(client: gmailClient).call(args);
   },
 };
-
 
   /// Extracts tool name + arguments from an event, runs the handler,
   /// and sends the tool output back to the model over the data channel.
