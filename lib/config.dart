@@ -132,18 +132,18 @@ Current date: {{CURRENT_DATE_READABLE}}
         "required": []
       }
     },
-    {
-      "type": "function",
-      "name": "gmail_read_email",
-      "description": "Get full email content by message ID.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "message_id": { "type": "string", "description": "Unique message id." }
-        },
-        "required": ["message_id"]
-      }
-    },
+    // {
+    //   "type": "function",
+    //   "name": "gmail_read_email",
+    //   "description": "Get full email content by message ID.",
+    //   "parameters": {
+    //     "type": "object",
+    //     "properties": {
+    //       "message_id": { "type": "string", "description": "Unique message id." }
+    //     },
+    //     "required": ["message_id"]
+    //   }
+    // },
   ];
 
 

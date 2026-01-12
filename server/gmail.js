@@ -386,7 +386,7 @@ export function registerGmailRoutes(app) {
 
       const collapsed = Array.from(byThread.values())
         .map(({ best, count }) => ({
-          id: best.id,
+          messageId: best.messageId,
           threadId: best.threadId,
           subject: best.subject,
           from: best.from,
