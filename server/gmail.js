@@ -356,7 +356,7 @@ export function registerGmailRoutes(app) {
           const h = headerMap(msg);
 
           return {
-            id: msg.id,
+            messageId: msg.id,
             threadId: msg.threadId,
             internalDate: Number(msg.internalDate || 0),
             subject: h["subject"] || "",

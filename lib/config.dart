@@ -135,13 +135,13 @@ Current date: {{CURRENT_DATE_READABLE}}
     {
       "type": "function",
       "name": "gmail_read_email",
-      "description": "Read one email. Use after gmail_search when user picks an email.",
+      "description": "Get full email content by message ID.",
       "parameters": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "description": "Email message id." }
+          "message_id": { "type": "string", "description": "Unique message id." }
         },
-        "required": ["id"]
+        "required": ["message_id"]
       }
     },
   ];
