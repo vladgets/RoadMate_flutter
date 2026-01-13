@@ -2,6 +2,21 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
+String _cleanSnippet(String s, {int maxLen = 220}) {
+  var out = s
+      .replaceAll('\n', ' ')
+      .replaceAll('\r', ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      // Common HTML entities seen in Gmail snippets
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&#39;', "'");
+  if (out.length > maxLen) out = '${out.substring(0, maxLen).trimRight()}…';
+  return out.trim();
+}
+
 /// A compact “email card” suitable for voice UX.
 class GmailEmailCard {
   final String id;
@@ -10,6 +25,7 @@ class GmailEmailCard {
   final String from;
   final String date;
   final String snippet;
+  final int? matchedCount;
 
   GmailEmailCard({
     required this.id,
@@ -18,26 +34,29 @@ class GmailEmailCard {
     required this.from,
     required this.date,
     required this.snippet,
+    this.matchedCount,
   });
 
   factory GmailEmailCard.fromJson(Map<String, dynamic> j) {
     return GmailEmailCard(
-      id: (j['id'] ?? '') as String,
+      id: (j['messageId'] ?? j['id'] ?? '') as String,
       threadId: (j['threadId'] ?? '') as String,
       subject: (j['subject'] ?? '') as String,
       from: (j['from'] ?? '') as String,
       date: (j['date'] ?? '') as String,
       snippet: (j['snippet'] ?? '') as String,
+      matchedCount: j['matched_count'] is num ? (j['matched_count'] as num).toInt() : null,      
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
+        'messageId': id,
         'threadId': threadId,
         'subject': subject,
         'from': from,
         'date': date,
-        'snippet': snippet,
+        'snippet': _cleanSnippet(snippet), 
+        if (matchedCount != null) 'matched_count': matchedCount,
       };
 }
 
@@ -216,11 +235,28 @@ class GmailSearchTool {
       maxResults: args['max_results'] is num ? (args['max_results'] as num).toInt() : 5,
     );
 
+    final summaryBuf = StringBuffer();
+    if (resp.results.isEmpty) {
+      summaryBuf.write('No matching emails found.');
+    } else {
+      summaryBuf.writeln('Found ${resp.results.length} matching email(s):');
+      for (var i = 0; i < resp.results.length; i++) {
+        final e = resp.results[i];
+        final mc = (e.matchedCount != null) ? ' (thread msgs: ${e.matchedCount})' : '';
+        summaryBuf.writeln(
+            '${i + 1}) messageId=${e.id} | from=${e.from} | date=${e.date} | subject=${e.subject}$mc | snippet=${_cleanSnippet(e.snippet)}');
+      }
+    }
+
     return {
       'ok': true,
       // Useful for debugging / transparency, can remove if you want even smaller.
       'query': resp.query,
-      'emails': resp.results.map((e) => e.toJson()).toList(),
+      'count': resp.results.length,
+      // Plain-text summary is easiest for the voice model to ground on.
+      'summary': summaryBuf.toString().trim(),
+      // Keep structured results for follow-up tool calls.      
+      'results': resp.results.map((e) => e.toJson()).toList(),
     };
   }
 }
@@ -241,13 +277,12 @@ class GmailReadEmailTool {
     return {
       'ok': true,
       'email': {
-        'id': resp.id,
+        'messageId': resp.id,
         'threadId': resp.threadId,
         'subject': resp.subject,
         'from': resp.from,
         'date': resp.date,
-        'snippet': resp.snippet,
-      }
+        'snippet': _cleanSnippet(resp.snippet, maxLen: 800),      }
     };
   }
 }

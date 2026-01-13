@@ -20,7 +20,7 @@ When user asks about their saved facts, retrieve them with "memory_fetch" and su
 
 WebSearch: Use WebSearch tool for up-to-date or verifiable real-world facts; otherwise answer from knowledge, and never invent facts beyond search results.
 
-Mail: When user asks about their emails, use the Gmail search tool to find relevant emails.
+Email: When user asks about their emails, use the Gmail search tool to find relevant emails. Don't invent answers just reply with returned email snippets.
 
 Current date: {{CURRENT_DATE_READABLE}}
 ''';

@@ -276,6 +276,11 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // debugPrint("Event: $evt");
     final evtType = evt['type']?.toString();
 
+    if (evtType == 'error') {
+      debugPrint('🛑 Realtime server error: ${jsonEncode(evt)}');
+      return;
+    }
+
     // User and Assistant messages logging
     if (evtType == 'conversation.item.input_audio_transcription.completed') {
       final transcript = evt['transcript'];
@@ -417,7 +422,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       'item': {
         'type': 'function_call_output',
         'call_id': callId,
-        'name': name,
+        // 'name': name,
         'output': jsonEncode(output),
       },
     };
@@ -427,6 +432,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // Ask the model to continue after receiving the tool output.
     dc.send(RTCDataChannelMessage(jsonEncode({'type': 'response.create'})));
     debugPrint('>>> Sent tool output: $name (call_id=$callId)');
+    debugPrint(jsonEncode(payload));
   }
 
 
