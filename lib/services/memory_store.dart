@@ -15,6 +15,22 @@ class MemoryStore {
     return f.readAsString();
   }
 
+  /// Overwrite the entire memory file with the provided text.
+  /// Normalizes line endings and ensures a trailing newline when non-empty.
+  static Future<void> writeAll(String text) async {
+    final f = await _file();
+
+    // Normalize Windows CRLF to LF for consistency
+    var normalized = text.replaceAll('\r\n', '\n');
+
+    // Ensure trailing newline if file is not empty
+    if (normalized.trim().isNotEmpty && !normalized.endsWith('\n')) {
+      normalized = '$normalized\n';
+    }
+
+    await f.writeAsString(normalized, mode: FileMode.write, flush: true);
+  }
+
   static Future<void> appendLine(String text) async {
     final line = _sanitizeOneLine(text);
     final f = await _file();

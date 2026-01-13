@@ -12,10 +12,20 @@ class _MemorySettingsScreenState extends State<MemorySettingsScreen> {
   String _memoryText = '';
   bool _loading = true;
 
+  final TextEditingController _controller = TextEditingController();
+  bool _editing = false;
+  String _lastLoadedText = '';
+
   @override
   void initState() {
     super.initState();
     _refresh();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -24,16 +34,30 @@ class _MemorySettingsScreenState extends State<MemorySettingsScreen> {
     setState(() {
       _memoryText = text;
       _loading = false;
+
+      // Only update the editor if the user isn't actively editing.
+      if (!_editing) {
+        _controller.text = text;
+        _lastLoadedText = text;
+      }      
     });
   }
 
-  Future<void> _addTestLine() async {
-    await MemoryStore.appendLine('Test fact at ${DateTime.now().toIso8601String()}');
-    await _refresh();
+  Future<void> _toggleEdit() async {
+    setState(() {
+      _editing = !_editing;
+      if (_editing) {
+        _controller.text = _memoryText;
+        _lastLoadedText = _memoryText;
+      }
+    });
   }
 
-  Future<void> _clear() async {
-    await MemoryStore.clear();
+  Future<void> _saveEdits() async {
+    await MemoryStore.writeAll(_controller.text);
+    setState(() {
+      _editing = false;
+    });
     await _refresh();
   }
 
@@ -44,6 +68,11 @@ class _MemorySettingsScreenState extends State<MemorySettingsScreen> {
         title: const Text('Long-term Memory'),
         actions: [
           IconButton(
+            tooltip: _editing ? 'Cancel edit' : 'Edit',
+            onPressed: _toggleEdit,
+            icon: Icon(_editing ? Icons.close : Icons.edit),
+          ),
+          IconButton(            
             tooltip: 'Refresh',
             onPressed: _refresh,
             icon: const Icon(Icons.refresh),
@@ -58,17 +87,12 @@ class _MemorySettingsScreenState extends State<MemorySettingsScreen> {
                   padding: const EdgeInsets.all(12),
                   child: Row(
                     children: [
-                      ElevatedButton.icon(
-                        onPressed: _addTestLine,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add test line'),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        onPressed: _clear,
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Clear'),
-                      ),
+                      if (_editing)
+                        ElevatedButton.icon(
+                          onPressed: _controller.text == _lastLoadedText ? null : _saveEdits,
+                          icon: const Icon(Icons.save),
+                          label: const Text('Save'),
+                        ),
                     ],
                   ),
                 ),
@@ -77,12 +101,28 @@ class _MemorySettingsScreenState extends State<MemorySettingsScreen> {
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
-                    child: SingleChildScrollView(
-                      child: SelectableText(
-                        _memoryText.isEmpty ? '(memory is empty)' : _memoryText,
-                        style: const TextStyle(fontSize: 14, height: 1.3),
-                      ),
-                    ),
+                                        child: _editing
+                        ? TextField(
+                            controller: _controller,
+                            maxLines: null,
+                            expands: true,
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                              hintText: 'Edit memory file contents…',
+                            ),
+                            style: const TextStyle(fontSize: 14, height: 1.3),
+                            onChanged: (_) {
+                              // Trigger rebuild so Save button enabled state updates.
+                              setState(() {});
+                            },
+                          )
+                        : SingleChildScrollView(
+                            child: SelectableText(
+                              _memoryText.isEmpty ? '(memory is empty)' : _memoryText,
+                              style: const TextStyle(fontSize: 14, height: 1.3),
+                            ),
+                          ),
                   ),
                 ),
               ],
