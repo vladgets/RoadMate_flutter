@@ -267,9 +267,9 @@ class GmailReadEmailTool {
   GmailReadEmailTool({required this.client});
 
   Future<Map<String, dynamic>> call(Map<String, dynamic> args) async {
-    final id = args['id'] as String?;
+    final id = args['message_id'] as String?;
     if (id == null || id.isEmpty) {
-      return {'ok': false, 'error': 'Missing required field: id'};
+      return {'ok': false, 'error': 'Missing required field: message_id'};
     }
 
     final resp = await client.readEmailMetadata(id: id);
@@ -286,7 +286,6 @@ class GmailReadEmailTool {
     };
   }
 }
-
 
 
 /// Quick manual test you can call from your Settings menu.
