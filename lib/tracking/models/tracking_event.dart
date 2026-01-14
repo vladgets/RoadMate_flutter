@@ -3,6 +3,7 @@ import 'location_fix.dart';
 
 /// Типы событий системы трекинга
 enum TrackingEventType {
+  trackingStarted,
   stateChanged,
   stopStarted,
   stopConfirmed,
@@ -30,12 +31,32 @@ class TrackingEvent {
     this.retryCount = 0,
   });
   
+  /// Создает событие TRACKING_STARTED
+  factory TrackingEvent.trackingStarted({
+    required LocationFix location,
+    required DateTime timestamp,
+  }) {
+    return TrackingEvent(
+      clientEventId: _generateEventId(),
+      type: TrackingEventType.trackingStarted,
+      payload: {
+        'location': location.toJson(),
+        'timestamp': timestamp.toIso8601String(),
+        'latitude': location.latitude,
+        'longitude': location.longitude,
+      },
+      createdAt: DateTime.now(),
+    );
+  }
+  
   /// Создает событие STATE_CHANGED
   factory TrackingEvent.stateChanged({
     required ActivityState oldState,
     required ActivityState newState,
     required double confidence,
     required DateTime timestamp,
+    double? latitude,
+    double? longitude,
   }) {
     return TrackingEvent(
       clientEventId: _generateEventId(),
@@ -45,6 +66,8 @@ class TrackingEvent {
         'new_state': newState.name,
         'confidence': confidence,
         'timestamp': timestamp.toIso8601String(),
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
       },
       createdAt: DateTime.now(),
     );

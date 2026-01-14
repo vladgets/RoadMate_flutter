@@ -6,6 +6,7 @@ import '../core/stop_detector.dart';
 import '../core/track_builder.dart';
 import '../core/profile_manager.dart';
 import '../core/battery_manager.dart';
+import '../core/sound_manager.dart';
 import '../storage/tracking_database.dart';
 import '../storage/event_queue.dart';
 import '../models/activity_state.dart';
@@ -67,6 +68,9 @@ class TrackingService {
   Future<void> start() async {
     if (_isRunning) return;
     
+    // Устанавливаем флаг сразу, чтобы предотвратить повторный вызов
+    _isRunning = true;
+    
     try {
       // Запускаем менеджер батареи
       await _batteryManager.startMonitoring();
@@ -74,6 +78,33 @@ class TrackingService {
       // Запускаем провайдеры
       await _activityProvider.start();
       await _locationProvider.start();
+      
+      // Получаем текущую локацию для события старта
+      try {
+        final startLocation = await _locationProvider.getCurrentLocation();
+        _lastLocation = startLocation;
+        final startTimestamp = DateTime.now();
+        
+        // Проверяем, не было ли недавно создано событие trackingStarted
+        // (защита от дублирования при быстрых перезапусках)
+        final recentEvents = await _database.getHistoryEvents(limit: 1);
+        final hasRecentStart = recentEvents.isNotEmpty &&
+            recentEvents.first.type == TrackingEventType.trackingStarted &&
+            startTimestamp.difference(recentEvents.first.createdAt).inSeconds < 5;
+        
+        if (!hasRecentStart) {
+          // Создаем событие старта трекинга
+          final trackingStartedEvent = TrackingEvent.trackingStarted(
+            location: startLocation,
+            timestamp: startTimestamp,
+          );
+          _eventQueue.enqueue(trackingStartedEvent);
+        }
+      } catch (e) {
+        // Если не удалось получить локацию, продолжаем без события старта
+        // ignore: avoid_print
+        print('Failed to get location for tracking start: $e');
+      }
       
       // Подписываемся на события
       _activitySubscription = _activityProvider.activityStream.listen(
@@ -99,9 +130,9 @@ class TrackingService {
       // Запускаем таймеры для обновления статуса
       _startStatusUpdateTimer();
       _startHeartbeatTimer();
-      
-      _isRunning = true;
     } catch (e) {
+      // В случае ошибки сбрасываем флаг
+      _isRunning = false;
       // ignore: avoid_print
       print('Failed to start tracking service: $e');
       rethrow;
@@ -173,15 +204,20 @@ class TrackingService {
   void _handleStateChange(StateChangeEvent event) {
     _currentState = event.newState;
     
+    // Воспроизводим звуковой сигнал при смене состояния
+    SoundManager.instance.playStateChangeSound(event.newState);
+    
     // Обновляем профиль GPS
     _profileManager.updateForState(_currentState);
     
-    // Создаем событие изменения состояния
+    // Создаем событие изменения состояния с координатами (если доступны)
     final trackingEvent = TrackingEvent.stateChanged(
       oldState: event.oldState,
       newState: event.newState,
       confidence: event.confidence,
       timestamp: event.timestamp,
+      latitude: _lastLocation?.latitude,
+      longitude: _lastLocation?.longitude,
     );
     _eventQueue.enqueue(trackingEvent);
     

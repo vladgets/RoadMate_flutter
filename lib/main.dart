@@ -6,7 +6,6 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config.dart';
-import 'tools.dart';
 import 'ui/memory_settings_screen.dart';
 import 'ui/extensions_settings_screen.dart';
 import 'services/extra_tools.dart';
@@ -17,6 +16,7 @@ import 'services/gmail_client.dart';
 import 'tracking/tracking_manager.dart';
 import 'tracking/ui/tracking_settings_screen.dart';
 import 'tracking/ui/tracking_status_widget.dart';
+import 'tracking/background/background_tracking_service.dart';
 
 void main() => runApp(const MyApp());
 
@@ -80,6 +80,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   @override
   void initState() {
     super.initState();
+    // Инициализируем трекинг при старте приложения
+    TrackingManager.instance.initialize();
+    // Инициализируем фоновый сервис для работы при заблокированном экране
+    BackgroundTrackingService.instance.initialize();
     // Ensure we have a stable client id for Gmail token storage on the server.
     ClientIdStore.getOrCreate().then((cid) {
       _clientId = cid;
@@ -93,24 +97,6 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   bool _connected = false;
   String? _status;
   String? _error;
-
-<<<<<<< HEAD
-  // final String tokenServerUrl = "http://10.0.2.2:3000/token";
-  final String tokenServerUrl = "https://roadmate-flutter.onrender.com/token";
-  
-  @override
-  void initState() {
-    super.initState();
-    // Инициализируем трекинг при старте приложения
-    TrackingManager.instance.initialize();
-    // Ensure we have a stable client id for Gmail token storage on the server.
-    ClientIdStore.getOrCreate().then((cid) {
-      _clientId = cid;
-      gmailClient = GmailClient(baseUrl: Config.serverUrl, clientId: cid);
-      debugPrint('[ClientId] $cid');
-      if (mounted) setState(() {});
-    });
-  }
 
   @override
   void dispose() {
@@ -389,7 +375,6 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     print('📅 [CALENDAR] get_calendar_data result: ${result['ok'] == true ? 'OK (${result['count'] ?? 0} events)' : 'ERROR: ${result['error']}'}');
     return result;
   },
-<<<<<<< HEAD
   'create_calendar_event': (args) async {
     // ignore: avoid_print
     print('📅 [CALENDAR] create_calendar_event called with args: $args');
@@ -635,7 +620,6 @@ class SettingsScreen extends StatelessWidget {
               );
             },
           ),
-<<<<<<< HEAD
           ListTile(
             leading: const Icon(Icons.location_on),
             title: const Text('Location Tracking'),

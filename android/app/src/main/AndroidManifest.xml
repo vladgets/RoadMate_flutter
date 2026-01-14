@@ -46,7 +46,7 @@
         
         <!-- Foreground service for location tracking -->
         <service
-            android:name="com.ryanheise.audioservice.AudioService"
+            android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="location"
             android:exported="false" />
     </application>

@@ -65,10 +65,22 @@ class LocationProvider {
       throw Exception('Location permission denied forever');
     }
     
+    // Для фоновой работы запрашиваем разрешение на фоновую локацию
+    if (permission == LocationPermission.whileInUse) {
+      // Пытаемся запросить разрешение на фоновую локацию
+      try {
+        permission = await Geolocator.requestPermission();
+      } catch (e) {
+        // ignore: avoid_print
+        print('Background location permission request failed: $e');
+      }
+    }
+    
     // Определяем настройки для текущего профиля
     _currentSettings = _getSettingsForProfile(_currentProfile);
     
     // Начинаем слушать обновления позиции
+    // Используем allowBackgroundLocationUpdates для работы в фоне
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: _currentSettings!,
     ).listen(
@@ -77,6 +89,7 @@ class LocationProvider {
         // ignore: avoid_print
         print('Location stream error: $error');
       },
+      cancelOnError: false,
     );
     
     _isRunning = true;

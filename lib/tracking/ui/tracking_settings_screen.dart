@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../storage/tracking_database.dart';
 import '../models/segment.dart';
 import '../models/activity_state.dart';
+import '../core/sound_manager.dart';
 import '../../tracking/tracking_manager.dart';
+import 'tracking_history_screen.dart';
 
 /// Экран настроек трекинга
 class TrackingSettingsScreen extends StatefulWidget {
@@ -21,6 +23,7 @@ class TrackingSettingsScreen extends StatefulWidget {
 
 class _TrackingSettingsScreenState extends State<TrackingSettingsScreen> {
   bool _isTrackingEnabled = false;
+  bool _isSoundEnabled = true;
   bool _isLoading = false;
   List<Segment> _recentSegments = [];
   
@@ -32,9 +35,33 @@ class _TrackingSettingsScreenState extends State<TrackingSettingsScreen> {
   }
   
   Future<void> _loadSettings() async {
+    // Инициализируем SoundManager если еще не инициализирован
+    await SoundManager.instance.initialize();
+    
     setState(() {
       _isTrackingEnabled = TrackingManager.instance.isRunning;
+      _isSoundEnabled = SoundManager.instance.isEnabled;
     });
+  }
+  
+  Future<void> _toggleSound() async {
+    final newValue = !_isSoundEnabled;
+    setState(() {
+      _isSoundEnabled = newValue;
+    });
+    
+    await SoundManager.instance.setEnabled(newValue);
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(newValue 
+              ? 'Sound notifications enabled' 
+              : 'Sound notifications disabled'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
   }
   
   Future<void> _loadRecentSegments() async {
@@ -166,6 +193,32 @@ class _TrackingSettingsScreenState extends State<TrackingSettingsScreen> {
             subtitle: const Text('Track your movement and detect stops'),
             value: _isTrackingEnabled,
             onChanged: (_) => _toggleTracking(),
+          ),
+          
+          // Переключатель звуковых сигналов
+          SwitchListTile(
+            title: const Text('Sound Notifications'),
+            subtitle: const Text('Play sound when state changes (STILL/WALKING/IN_VEHICLE)'),
+            value: _isSoundEnabled,
+            onChanged: (_) => _toggleSound(),
+          ),
+          
+          const Divider(),
+          
+          // История трекинга
+          ListTile(
+            title: const Text('Tracking History'),
+            subtitle: const Text('View tracking start points and state transitions'),
+            trailing: const Icon(Icons.history),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => TrackingHistoryScreen(
+                    database: widget.database,
+                  ),
+                ),
+              );
+            },
           ),
           
           const Divider(),

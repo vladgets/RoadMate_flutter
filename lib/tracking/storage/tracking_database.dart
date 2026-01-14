@@ -236,6 +236,45 @@ class TrackingDatabase {
     return maps.map((map) => _eventFromMap(map)).toList();
   }
   
+  /// Получить события истории (trackingStarted и stateChanged)
+  Future<List<TrackingEvent>> getHistoryEvents({int limit = 100}) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'events',
+      where: 'type IN (?, ?)',
+      whereArgs: [
+        TrackingEventType.trackingStarted.name,
+        TrackingEventType.stateChanged.name,
+      ],
+      orderBy: 'created_at DESC',
+      limit: limit,
+    );
+    return maps.map((map) => _eventFromMap(map)).toList();
+  }
+  
+  /// Удалить событие по ID
+  Future<void> deleteEvent(int eventId) async {
+    final db = await database;
+    await db.delete(
+      'events',
+      where: 'id = ?',
+      whereArgs: [eventId],
+    );
+  }
+  
+  /// Удалить все события истории (trackingStarted и stateChanged)
+  Future<void> deleteHistoryEvents() async {
+    final db = await database;
+    await db.delete(
+      'events',
+      where: 'type IN (?, ?)',
+      whereArgs: [
+        TrackingEventType.trackingStarted.name,
+        TrackingEventType.stateChanged.name,
+      ],
+    );
+  }
+  
   Future<void> markEventSynced(String clientEventId) async {
     final db = await database;
     await db.update(
