@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'config.dart';
 import 'ui/memory_settings_screen.dart';
 import 'ui/extensions_settings_screen.dart';
@@ -559,20 +560,49 @@ class SettingsScreen extends StatelessWidget {
           ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.science_outlined),
-            title: const Text('Testing'),
-            subtitle: const Text('Run Gmail test (logs only)'),
-            trailing: const Icon(Icons.play_arrow),
-            onTap: () {
-              ClientIdStore.getOrCreate().then((cid) {
-                testGmailClient(GmailClient(baseUrl: Config.serverUrl, clientId: cid));
-              });
+            leading: const Icon(Icons.chat_bubble_outline),
+            title: const Text('Test WhatsApp'),
+            subtitle: const Text('Open WhatsApp with a prefilled message'),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () async {
+              await testWhatsApp();
+              // Close settings screen after launching.
+              // ignore: use_build_context_synchronously
               Navigator.of(context).maybePop();
             },
           ),
         ],
       ),
     );
+  }
+}
+
+/// Opens WhatsApp with a prefilled message.
+/// Note: WhatsApp generally requires the user to tap Send.
+Future<void> testWhatsApp() async {
+  const text = 'RoadMate app is great!';
+  const phone = '14084552967';
+
+  // Option A: Native WhatsApp scheme (best on Android if WhatsApp is installed)
+  final native = Uri.parse('whatsapp://send?phone=$phone&text=${Uri.encodeComponent(text)}');
+
+  // Option B: Universal web link fallback (works even if native scheme fails)
+  // You can also target a specific phone number with: https://wa.me/<number>?text=...
+  final web = Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(text)}');
+
+  try {
+    if (await canLaunchUrl(native)) {
+      final ok = await launchUrl(native, mode: LaunchMode.externalApplication);
+      if (ok) return;
+    }
+  } catch (_) {
+    // ignore and fall back
+  }
+
+  // Fallback
+  final ok = await launchUrl(web, mode: LaunchMode.externalApplication);
+  if (!ok) {
+    throw Exception('Could not launch WhatsApp. Is it installed and available on this device?');
   }
 }
 
