@@ -1,14 +1,19 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'config.dart';
 import 'tools.dart';
-import 'memory_settings_screen.dart';
-import 'memory_store.dart';
-import 'extensions_settings_screen.dart';
-import 'calendar_store.dart';
+import 'ui/memory_settings_screen.dart';
+import 'ui/extensions_settings_screen.dart';
+import 'services/extra_tools.dart';
+import 'services/memory_store.dart';
+import 'services/calendar_store.dart';
+import 'services/web_search.dart';
+import 'services/gmail_client.dart';
 import 'tracking/tracking_manager.dart';
 import 'tracking/ui/tracking_settings_screen.dart';
 import 'tracking/ui/tracking_status_widget.dart';
@@ -34,16 +39,62 @@ class VoiceButtonPage extends StatefulWidget {
   State<VoiceButtonPage> createState() => _VoiceButtonPageState();
 }
 
+  // final String tokenServerUrl = "http://10.0.2.2:3000/token";
+  const tokenServerUrl = '${Config.serverUrl}/token';
+
+/// Persistent per-install client id used for server-side token partitioning (Gmail, etc.).
+/// No extra deps: uses Random.secure + base64url.
+class ClientIdStore {
+  static Future<String> getOrCreate() async {
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getString(Config.prefKeyClientId);
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    // 16 bytes -> 22 chars base64url without padding (roughly)
+    final rnd = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rnd.nextInt(256));
+    final cid = base64UrlEncode(bytes).replaceAll('=', '');
+
+    await prefs.setString(Config.prefKeyClientId, cid);
+    return cid;
+  }
+}
+
+
 class _VoiceButtonPageState extends State<VoiceButtonPage> {
   RTCPeerConnection? _pc;
   RTCDataChannel? _dc;
   MediaStream? _mic;
+
+  // Web search (reuse single instances)
+  late final WebSearchClient _webSearchClient = WebSearchClient();
+  late final WebSearchTool _webSearchTool = WebSearchTool(client: _webSearchClient);
+
+  // Gmail client (multi-user): initialized with per-install client id.
+  late final GmailClient gmailClient;
+  String? _clientId;
+
+  // Deduplicate tool calls (Realtime may emit in_progress + completed, and can resend events).
+  final Set<String> _handledToolCallIds = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    // Ensure we have a stable client id for Gmail token storage on the server.
+    ClientIdStore.getOrCreate().then((cid) {
+      _clientId = cid;
+      gmailClient = GmailClient(baseUrl: Config.serverUrl, clientId: cid);
+      debugPrint('[ClientId] $cid');
+      if (mounted) setState(() {});
+    });
+  }
 
   bool _connecting = false;
   bool _connected = false;
   String? _status;
   String? _error;
 
+<<<<<<< HEAD
   // final String tokenServerUrl = "http://10.0.2.2:3000/token";
   final String tokenServerUrl = "https://roadmate-flutter.onrender.com/token";
   
@@ -52,10 +103,18 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     super.initState();
     // Инициализируем трекинг при старте приложения
     TrackingManager.instance.initialize();
+    // Ensure we have a stable client id for Gmail token storage on the server.
+    ClientIdStore.getOrCreate().then((cid) {
+      _clientId = cid;
+      gmailClient = GmailClient(baseUrl: Config.serverUrl, clientId: cid);
+      debugPrint('[ClientId] $cid');
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _webSearchClient.close();
     _disconnect();
     super.dispose();
   }
@@ -113,15 +172,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       _dc = await _pc!.createDataChannel("oai-events", RTCDataChannelInit());
 
       _dc!.onDataChannelState = (RTCDataChannelState state) {
-        // ignore: avoid_print
-        print("DataChannel state: $state");
+        debugPrint("DataChannel state: $state");
 
       };
 
       _dc!.onMessage = (RTCDataChannelMessage msg) {
         // You can log JSON events here for debugging.
-        // ignore: avoid_print
-        print("OAI event: ${msg.text}");
+        // debugPrint("OAI event: ${msg.text}");
 
         // Best-effort parse and route.
         handleOaiEvent(msg.text);
@@ -172,11 +229,14 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     req.fields['session'] = jsonEncode({
       "type": "realtime",
       "model": Config.model,
-      "instructions": Config.systemPrompt,
+      "instructions": Config.buildSystemPrompt(),
       "tools": Config.tools,
       "tool_choice": "auto",
       "audio": {
-        "input": {"turn_detection": {"type": "server_vad"}},
+        "input": {
+          "turn_detection": {"type": "server_vad"},
+          "transcription": {"model": "gpt-4o-mini-transcribe"}
+        },
         "output": {"voice": Config.voice},
       }
     });
@@ -208,6 +268,9 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       _dc = null;
       _pc = null;
       _mic = null;
+      // Clear handled tool calls so a new session can reuse call ids safely.
+      _handledToolCallIds.clear();
+
       if (mounted) {
         setState(() {
           _connected = false;
@@ -231,10 +294,36 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       return; // Ignore non-JSON messages
     }
 
+    // debugPrint("Event: $evt");
+    final evtType = evt['type']?.toString();
+
+    if (evtType == 'error') {
+      debugPrint('🛑 Realtime server error: ${jsonEncode(evt)}');
+      return;
+    }
+
+    // User and Assistant messages logging
+    if (evtType == 'conversation.item.input_audio_transcription.completed') {
+      final transcript = evt['transcript'];
+      if (transcript is String && transcript.trim().isNotEmpty) {
+        debugPrint('🧑 User said: ${transcript.trim()}');
+      }
+      return;
+    }
+
+    if (evtType == 'response.output_audio_transcript.done') {
+      final transcript = evt['transcript'];
+      if (transcript is String && transcript.trim().isNotEmpty) {
+        debugPrint('🤖 Assistant said: ${transcript.trim()}');
+      }
+      return;
+    }
+
+    // From here on we only handle events that include a conversation item.
     final item = evt['item'];
+    if (item is! Map<String, dynamic>) return;
 
     // We only care about function/tool calls
-    if (item is! Map<String, dynamic>) return;
     if (item['type'] != 'function_call') return;
 
     // ignore: avoid_print
@@ -242,8 +331,16 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // ignore: avoid_print
     print("🔧 [FUNCTION_CALL] Full event: $item");
     
-    final callId = item['call_id'] ?? item['id'];
-    final name = item['name'];
+    // Realtime often emits in_progress events with empty arguments and then a completed event.
+    // Only execute when completed.
+    final status = item['status'];
+    if (status != 'completed') {
+      debugPrint(">>> Function call event (ignored, status=$status): {name: ${item['name']}, call_id: ${item['call_id'] ?? item['id']}}");
+      return;
+    }
+
+    final callId = (item['call_id'] ?? item['id'])?.toString();
+    final name = item['name']?.toString();
     final arguments = item['arguments'];
 
     if (callId == null || name == null) {
@@ -255,21 +352,26 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // ignore: avoid_print
     print("🔧 [FUNCTION_CALL] Executing: $name with args: $arguments");
 
-    _executeToolCallFromEvent(
-      {
-        'call_id': callId,
-        'name': name,
-        'arguments': arguments,
-      }
-    );
-  }
+    // Deduplicate: sometimes the same completed call is delivered more than once.
+    if (_handledToolCallIds.contains(callId)) {
+      debugPrint(">>> Function call event (duplicate ignored): $name (call_id=$callId)");
+      return;
+    }
+    _handledToolCallIds.add(callId);
 
+    debugPrint(">>> Function call event (completed): $item");
+
+    _executeToolCallFromEvent({
+      'call_id': callId,
+      'name': name,
+      'arguments': arguments,
+    });
+  }
 
 /// Tool handlers map
  late final Map<String, Future<Map<String, dynamic>> Function(dynamic args)> _tools = {
    'get_current_location': (_) async {
-     final loc = await getCurrentLocation(); // <-- your implementation
-     return loc; // must be JSON-serializable Map
+     return await getCurrentLocation(); 
    },
   // Long-term memory tools
   'memory_append': (args) async {
@@ -287,6 +389,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     print('📅 [CALENDAR] get_calendar_data result: ${result['ok'] == true ? 'OK (${result['count'] ?? 0} events)' : 'ERROR: ${result['error']}'}');
     return result;
   },
+<<<<<<< HEAD
   'create_calendar_event': (args) async {
     // ignore: avoid_print
     print('📅 [CALENDAR] create_calendar_event called with args: $args');
@@ -311,8 +414,28 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     print('📅 [CALENDAR] delete_calendar_event result: ${result['ok'] == true ? 'OK (event_id: ${result['event_id']})' : 'ERROR: ${result['error']}'}');
     return result;
   },
+  // Time and date tool
+  'get_current_time': (_) async {
+    return await getCurrentTime(); 
+  },
+  // Web search tool
+  'web_search': (args) async {
+    return await _webSearchTool.call(args);
+  },
+  'gmail_search': (args) async {
+    // If client id / gmail client isn't ready yet, fail fast with a clear error.
+    if (_clientId == null) {
+      throw Exception('Gmail is not initialized yet (client id missing). Try again in a second.');
+    }
+    return await GmailSearchTool(client: gmailClient).call(args);
+  },
+  'gmail_read_email': (args) async {
+    if (_clientId == null) {
+      throw Exception('Gmail is not initialized yet (client id missing). Try again in a second.');
+    }
+    return await GmailReadEmailTool(client: gmailClient).call(args);
+  },
 };
-
 
   /// Extracts tool name + arguments from an event, runs the handler,
   /// and sends the tool output back to the model over the data channel.
@@ -346,18 +469,9 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
     try {
       final Map<String, dynamic> result = await toolHandler(args);
-      // Log calendar function results for debugging
-      if (toolName == 'get_calendar_data' || 
-          toolName == 'create_calendar_event' || 
-          toolName == 'update_calendar_event' || 
-          toolName == 'delete_calendar_event') {
-        // ignore: avoid_print
-        print('>>> Calendar function ($toolName) result: ${jsonEncode(result)}');
-      }
       await _sendToolOutput(callId: callId, name: toolName, output: result);
     } catch (e) {
-      // ignore: avoid_print
-      print('>>> Tool execution error ($toolName): $e');
+      debugPrint('>>> Tool execution error ($toolName): $e');
       await _sendToolOutput(
         callId: callId,
         name: toolName,
@@ -392,6 +506,8 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
     // Ask the model to continue after receiving the tool output.
     dc.send(RTCDataChannelMessage(jsonEncode({'type': 'response.create'})));
+    debugPrint('>>> Sent tool output: $name (call_id=$callId)');
+    debugPrint(jsonEncode(payload));
   }
 
 
@@ -519,6 +635,7 @@ class SettingsScreen extends StatelessWidget {
               );
             },
           ),
+<<<<<<< HEAD
           ListTile(
             leading: const Icon(Icons.location_on),
             title: const Text('Location Tracking'),
@@ -538,6 +655,19 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 );
               }
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.science_outlined),
+            title: const Text('Testing'),
+            subtitle: const Text('Run Gmail test (logs only)'),
+            trailing: const Icon(Icons.play_arrow),
+            onTap: () {
+              ClientIdStore.getOrCreate().then((cid) {
+                testGmailClient(GmailClient(baseUrl: Config.serverUrl, clientId: cid));
+              });
+              Navigator.of(context).maybePop();
             },
           ),
         ],

@@ -1,6 +1,10 @@
 import express from "express";
+import { registerGmailRoutes } from "./gmail.js";
 
 const app = express();
+app.use(express.json());
+registerGmailRoutes(app);
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 app.get("/token", async (req, res) => {
@@ -31,5 +35,94 @@ app.get("/token", async (req, res) => {
   const data = await r.json();
   res.json(data); // contains { value: "ek_..." }
 });
+
+// web search endpoint (using OpenAI Responses API with web search tool)
+app.post("/websearch", async (req, res) => {
+  try {
+    const { query, model } = req.body ?? {};
+    if (!query || typeof query !== "string") {
+      return res.status(400).json({ ok: false, error: "Missing required field: query" });
+    }
+
+    const r = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: model || "gpt-4.1-mini",
+        input:
+          "Search the web for accurate, up-to-date information for the query. " +
+          "Return up to 3 results as short snippets (1-3 sentences each) suitable for voice. " +
+          "Prefer authoritative sources. Query: " +
+          query,
+        tools: [{ type: "web_search" }],
+      }),
+    });
+
+    const data = await r.json();
+
+    if (!r.ok) {
+      return res.status(r.status).json({ ok: false, error: data?.error?.message || "OpenAI error", ...(INCLUDE_RAW ? { raw: data } : {}) });
+    }
+
+    // Extract the assistant's answer text.
+    const output = Array.isArray(data?.output) ? data.output : [];
+    let answer = "";
+
+    for (const item of output) {
+      if (item?.type !== "message") continue;
+      if (item?.role && item.role !== "assistant") continue;
+
+      const content = Array.isArray(item?.content) ? item.content : [];
+      for (const c of content) {
+        if (c?.type === "output_text" && typeof c?.text === "string") {
+          answer += (answer ? "\n" : "") + c.text;
+        }
+      }
+    }
+
+    // answer = String(answer || "").trim();
+    // Clean URLs from the answer text (citations are returned separately in `sources`)
+    answer = String(answer || "")
+      // remove markdown-style links: [text](url)
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1")
+      // remove raw URLs
+      .replace(/https?:\/\/\S+/g, "")
+      // normalize whitespace
+      .replace(/\s{2,}/g, " ")
+      .trim();
+
+    // Extract citations (sources) from url_citation annotations.
+    const sources = [];
+    for (const item of output) {
+      if (item?.type !== "message") continue;
+      const content = Array.isArray(item?.content) ? item.content : [];
+      for (const c of content) {
+        if (c?.type !== "output_text") continue;
+        const anns = Array.isArray(c?.annotations) ? c.annotations : [];
+        for (const a of anns) {
+          if (a?.type !== "url_citation") continue;
+          const title = a?.title ?? "";
+          const url = a?.url ?? "";
+          if (title || url) sources.push({ title, url });
+        }
+      }
+    }
+
+    // Return a compact response for Flutter.
+    return res.status(200).json({
+      ok: true,
+      query,
+      answer,
+      sources: sources,
+    });
+
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+});
+
 
 app.listen(3000, () => console.log("Token server on :3000"));

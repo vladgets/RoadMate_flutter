@@ -1,19 +1,26 @@
-class Config {
-  static const String systemPrompt = '''
-You are a realtime voice AI helping users during driving on the road.
+import 'services/extra_tools.dart';
 
-Personality: warm, witty, quick-talking; conversationally human.
+
+class Config {
+  static const String systemPromptTemplate = '''
+You are a realtime voice AI assistant helping users on the go.
+
+Personality: warm, witty, quick-talking; conversationally human. 
+When responding in languages that have grammatical gender in verbs like Russian, always use the feminine grammatical form when referring to yourself.
 
 Language: mirror user; default English (US). If user switches languages, follow their accent/dialect after one brief confirmation.
 
 Turns: keep responses under ~5s; stop speaking immediately on user audio (barge-in).
 
 Tools: call a function whenever it can answer faster or more accurately than guessing; summarize tool output briefly.
+If user asks about their calendar events, use calendar functions to fetch the content.
 
 Memory: You can save facts to long-term memory with "memory_append" when user ask to remember things. 
 When user asks about their saved facts, retrieve them with "memory_fetch" and summarize concisely.
 
-Calendar: ALWAYS call "get_calendar_data" IMMEDIATELY when user asks about their schedule, events, meetings, or what they have planned - even if they mention approximate times like "around 7 PM" or "in the evening". Do NOT say you will check without actually calling the function. The function returns events from the past 30 days to the next 30 days. After getting the data, filter and summarize events based on the user's query (date, time, title, etc.).
+WebSearch: Use WebSearch tool for up-to-date or verifiable real-world facts; otherwise answer from knowledge, and never invent facts beyond search results.
+
+Email: When user asks about their emails, use the Gmail search tool to find relevant emails. Use all the search terms in English.
 
 When user wants to create, update, or delete calendar events, ask clarifying questions to get all necessary information:
 - For creating: title (required), start time (required), end time (optional, defaults to start + 1 hour), description (optional), location (optional)
@@ -21,17 +28,30 @@ When user wants to create, update, or delete calendar events, ask clarifying que
 - For deleting: event_id OR (title and start_date) to find the event
 Always confirm the action before executing (e.g., "I'll create a meeting called X at Y time. Should I proceed?").
 CRITICAL: After the user confirms (says "yes", "ok", "да", "хорошо", etc.), you MUST IMMEDIATELY call the corresponding function (create_calendar_event, update_calendar_event, or delete_calendar_event). Do NOT just say you will do it - actually call the function right away. If you said you will update/delete/create an event, you must call the function in the same turn or immediately after confirmation.
+
+Current date: {{CURRENT_DATE_READABLE}}
 ''';
 
   static const String model = "gpt-realtime-mini-2025-12-15";
   static const String voice = "marin";
+
+  // Our server URL and preference keys
+  static const serverUrl = "https://roadmate-flutter.onrender.com";
+  static const prefKeyClientId = 'roadmate_client_id';
+
+
+  /// Build the system prompt with the current readable date
+  static String buildSystemPrompt() {
+    return systemPromptTemplate.replaceAll('{{CURRENT_DATE_READABLE}}', getCurrentReadableDate());
+  }
 
 
   // Tool definitions exposed to the Realtime model.
   // The model may call these by name; your app must execute them and send back
   // a `function_call_output` event with the returned JSON.
   static const List<Map<String, dynamic>> tools = [
-    {
+    // location related tool
+    { 
       "type": "function",
         "name": "get_current_location",
         "description": "Get the user's current GPS location.",
@@ -40,6 +60,7 @@ CRITICAL: After the user confirms (says "yes", "ok", "да", "хорошо", etc
           "properties": {}
         }
     },
+    // memory related tools
     {
       "type": "function",
       "name": "memory_append",
@@ -62,37 +83,98 @@ CRITICAL: After the user confirms (says "yes", "ok", "да", "хорошо", etc
       "parameters": {
         "type": "object",
         "properties": {},
-        "required": []
       }
     },
+    // calendar related tools
     {
       "type": "function",
       "name": "get_calendar_data",
-      "description": "ALWAYS call this function immediately when user asks about their schedule, events, meetings, or what they have planned - even if they mention approximate times like 'around 7 PM', 'in the evening', 'today', 'tomorrow', etc. Returns events from the past 30 days to the next 30 days. You MUST call this function to get actual calendar data - do not guess or say you will check without calling it.",
+      "description": "Fetch user calendar data.",
       "parameters": {
         "type": "object",
         "properties": {},
+      }
+    },
+    // time and date
+    {
+      "type": "function",
+      "name": "get_current_time",
+      "description": "Returns the user's current local date and time.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    // web search tool
+    {
+      "type": "function",
+      "name": "web_search",
+      "description": "Search the web for up-to-date real-world information.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    // gmail tools
+    {
+      "type": "function",
+      "name": "gmail_search",
+      "description": "Search Gmail using simple fields (voice-friendly). Returns a small list of email cards: from/subject/date/snippet.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string", "description": "Keywords to search for." },
+          "from": { "type": "string", "description": "Sender name or email (optional)." },
+          "subject": { "type": "string", "description": "Subject keywords (optional)." },
+          "unread_only": { "type": "boolean", "description": "If true, only unread emails." },
+          "in_inbox": { "type": "boolean", "description": "If true, search inbox only." },
+          "newer_than_days": { "type": "integer", "minimum": 1, "maximum": 365, "description": "Limit to recent emails." },
+          "max_results": { "type": "integer", "minimum": 1, "maximum": 10, "description": "How many emails to return." }
+        },
         "required": []
       }
     },
     {
       "type": "function",
+      "name": "gmail_read_email",
+      "description": "Get full email content by message ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "message_id": { "type": "string", "description": "Unique message id." }
+        },
+        "required": ["message_id"]
+      }
+    },
+  ];
+
+
+  // Deprecated or currently unused tool definitions.
+  static const List<Map<String, dynamic>> notUsedTools = [
+    // calendar event management tools
+    {
+      "type": "function",
       "name": "create_calendar_event",
-      "description": "Create a new calendar event. Ask the user for title and start time (required), and optionally end time, description, and location. If end time is not provided, it defaults to start time + 1 hour.",
+      "description": "Create a new calendar event.",
       "parameters": {
         "type": "object",
         "properties": {
           "title": {
             "type": "string",
-            "description": "Event title (required)"
+            "description": "Event title"
           },
           "start": {
             "type": "string",
-            "description": "Start date and time in ISO 8601 format (required), e.g., '2025-12-15T14:00:00'"
+            "description": "Start date and time in ISO 8601 format"
           },
           "end": {
             "type": "string",
-            "description": "End date and time in ISO 8601 format (optional, defaults to start + 1 hour)"
+            "description": "End date and time in ISO 8601 format (optional)"
           },
           "description": {
             "type": "string",
@@ -102,10 +184,6 @@ CRITICAL: After the user confirms (says "yes", "ok", "да", "хорошо", etc
             "type": "string",
             "description": "Event location (optional)"
           },
-          "calendar_id": {
-            "type": "string",
-            "description": "Calendar ID to create event in (optional, uses default calendar if not provided)"
-          }
         },
         "required": ["title", "start"]
       }
@@ -113,7 +191,7 @@ CRITICAL: After the user confirms (says "yes", "ok", "да", "хорошо", etc
     {
       "type": "function",
       "name": "update_calendar_event",
-      "description": "Update an existing calendar event. You can find the event either by event_id or by searching with title and start_date. Then specify which fields to update.",
+      "description": "Update an existing calendar event.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -152,7 +230,7 @@ CRITICAL: After the user confirms (says "yes", "ok", "да", "хорошо", etc
     {
       "type": "function",
       "name": "delete_calendar_event",
-      "description": "Delete a calendar event. You can find the event either by event_id or by searching with title and start_date.",
+      "description": "Delete a calendar event.",
       "parameters": {
         "type": "object",
         "properties": {
