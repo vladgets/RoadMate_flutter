@@ -165,8 +165,29 @@ Current date: {{CURRENT_DATE_READABLE}}
           "units": {
             "type": "string",
             "enum": ["metric", "imperial"],
-            "description": "Distance units, defaults to imperial (US-friendly).",
+            "description": "Distance units, defaults to imperial.",
             "default": "imperial",
+          },
+        },
+        "required": ["destination"],
+      }
+    },
+    // navigation using existing maps apps
+    {
+      "type": "function",
+      "name": "navigate_to_destination",
+      "description": "Open the phone's Maps app showing a route from current location to a destination.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "description": "Destination address.",
+          },
+          "route_type": {
+            "type": "string",
+            "enum": ["by_car", "on_foot"],
+            "default": "by_car",
           },
         },
         "required": ["destination"],

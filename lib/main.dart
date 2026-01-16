@@ -14,7 +14,7 @@ import 'services/memory_store.dart';
 import 'services/calendar_store.dart';
 import 'services/web_search.dart';
 import 'services/gmail_client.dart';
-import 'services/map_eta.dart';
+import 'services/map_navigation.dart';
 
 
 void main() => runApp(const MyApp());
@@ -374,9 +374,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     }
     return await GmailReadEmailTool(client: gmailClient).call(args);
   },
-  // Web search tool
+  // traffic ETA tool
   'traffic_eta': (args) async {
     return await handleTrafficEtaToolCall(args);
+  },
+  // open maps route tool
+  'navigate_to_destination': (args) async {
+    return await handleOpenMapsRouteToolCall(args);
   },
 };
 

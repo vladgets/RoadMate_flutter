@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import 'extra_tools.dart';
 
@@ -81,4 +83,52 @@ Future<Map<String, dynamic>> handleTrafficEtaToolCall(Map<String, dynamic> args)
   // Your server already returns a nice voice summary
   // (and structured fields like distanceMeters/baseSeconds/liveSeconds).
   return data;
+}
+
+/// Handles a call to the Open Maps Route tool.
+Future<Map<String, dynamic>> handleOpenMapsRouteToolCall(Map<String, dynamic> args) async {
+  final destination = (args["destination"] as String?)?.trim();
+  if (destination == null || destination.isEmpty) {
+    return {"ok": false, "error": "Missing required parameter: destination"};
+  }
+
+  final routeType = (args["route_type"] as String?) ?? "by_car";
+  final encodedDest = Uri.encodeComponent(destination);
+
+  Uri launchUri;
+
+  if (Platform.isAndroid) {
+    // 🔹 Android: system navigation intent (default app)
+    // driving → google.navigation:q=
+    // walking → google.navigation:q=&mode=w
+    final mode = routeType == "on_foot" ? "w" : "d";
+
+    launchUri = Uri.parse(
+      "google.navigation:q=$encodedDest&mode=$mode",
+    );
+  } else if (Platform.isIOS) {
+    // 🔹 iOS: Apple Maps (system default)
+    final dirFlag = routeType == "on_foot" ? "w" : "d";
+
+    launchUri = Uri.parse(
+      "http://maps.apple.com/?daddr=$encodedDest&dirflg=$dirFlag",
+    );
+  } else {
+    return {"ok": false, "error": "Unsupported platform"};
+  }
+
+  final opened = await launchUrl(
+    launchUri,
+    mode: LaunchMode.externalApplication,
+  );
+
+  if (!opened) {
+    return {"ok": false, "error": "Could not open navigation app"};
+  }
+
+  return {
+    "ok": true,
+    "opened": true,
+    "mode": routeType,
+  };
 }
