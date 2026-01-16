@@ -13,10 +13,10 @@ Language: mirror user; default English (US). If user switches languages, follow 
 Turns: keep responses under ~5s; stop speaking immediately on user audio (barge-in).
 
 Tools: call a function whenever it can answer faster or more accurately than guessing; summarize tool output briefly.
-If user asks about their calendar events, use calendar functions to fetch the content.
+If a tool call requires parameters try to infer from the context or fetch from memory using memory_fetch tool first before asking user for more info.
 
 Memory: You can save facts to long-term memory with "memory_append" when user ask to remember things. 
-If user asks refer to or ask some personal information check your memory first using "memory_fetch" tool.
+If user asks refer to personal information check your memory using "memory_fetch" tool.
 
 WebSearch: Use WebSearch tool for up-to-date or verifiable real-world facts; otherwise answer from knowledge, and never invent facts beyond search results.
 
@@ -37,7 +37,6 @@ Current date: {{CURRENT_DATE_READABLE}}
   static String buildSystemPrompt() {
     return systemPromptTemplate.replaceAll('{{CURRENT_DATE_READABLE}}', getCurrentReadableDate());
   }
-
 
   // Tool definitions exposed to the Realtime model.
   // The model may call these by name; your app must execute them and send back
@@ -117,7 +116,7 @@ Current date: {{CURRENT_DATE_READABLE}}
     {
       "type": "function",
       "name": "gmail_search",
-      "description": "Search Gmail using simple fields (voice-friendly). Returns a small list of email cards: from/subject/date/snippet.",
+      "description": "Search Gmail using simple fields. Returns a small list of email cards: from/subject/date/snippet.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -144,6 +143,35 @@ Current date: {{CURRENT_DATE_READABLE}}
         "required": ["message_id"]
       }
     },
+    // traffic ETA tool
+    {
+      "type": "function",
+      "name": "traffic_eta",
+      "description": "Get ETA and traffic summary between current location and a destination. ",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "description":
+                "Destination address",
+          },
+          "route_type": {
+            "type": "string",
+            "enum": ["by_car", "on_foot"],
+            "description": "Route type, defaults to by_car.",
+            "default": "by_car",
+          },
+          "units": {
+            "type": "string",
+            "enum": ["metric", "imperial"],
+            "description": "Distance units, defaults to imperial (US-friendly).",
+            "default": "imperial",
+          },
+        },
+        "required": ["destination"],
+      }
+    }
   ];
 
 

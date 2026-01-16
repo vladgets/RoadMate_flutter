@@ -18,9 +18,9 @@ function buildTrafficSummary({ baseSeconds, liveSeconds, mode }) {
   }
 
   let trafficLevel = "light";
-  if (deltaSec <= 60 || ratio < 1.05) trafficLevel = "light";
-  else if (deltaSec <= 240 || ratio < 1.20) trafficLevel = "moderate";
-  else if (deltaSec <= 600 || ratio < 1.40) trafficLevel = "heavy";
+  if (deltaSec <= 120 || ratio < 1.1) trafficLevel = "light";
+  else if (deltaSec <= 300 || ratio < 1.30) trafficLevel = "moderate";
+  else if (deltaSec <= 600 || ratio < 1.50) trafficLevel = "heavy";
   else trafficLevel = "very heavy";
 
   if (deltaMin <= 0) {

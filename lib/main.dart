@@ -14,6 +14,7 @@ import 'services/memory_store.dart';
 import 'services/calendar_store.dart';
 import 'services/web_search.dart';
 import 'services/gmail_client.dart';
+import 'services/map_eta.dart';
 
 
 void main() => runApp(const MyApp());
@@ -372,6 +373,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       throw Exception('Gmail is not initialized yet (client id missing). Try again in a second.');
     }
     return await GmailReadEmailTool(client: gmailClient).call(args);
+  },
+  // Web search tool
+  'traffic_eta': (args) async {
+    return await handleTrafficEtaToolCall(args);
   },
 };
 
