@@ -135,7 +135,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       // On mobile, WebRTC audio generally plays via native audio output automatically.
       _pc!.onTrack = (RTCTrackEvent e) {
         if (e.track.kind == 'audio') {
-          setState(() => _status = "Assistant connected (audio ready). Talk!");
+          setState(() => _status = "Assistant connected. Talk!");
         }
       };
 

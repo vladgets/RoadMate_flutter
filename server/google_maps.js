@@ -1,19 +1,42 @@
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
+
+function formatDistance(distanceMeters, units) {
+  const u = String(units || "metric").toLowerCase();
+
+  if (u === "imperial") {
+    const miles = distanceMeters / 1609.344;
+    // 0-10 mi -> 1 decimal, otherwise 0 decimals
+    const milesText = miles < 10 ? miles.toFixed(1) : miles.toFixed(0);
+    return `${milesText} mi`;
+  }
+
+  // metric
+  if (distanceMeters < 1000) {
+    return `${Math.round(distanceMeters)} m`;
+  }
+  const km = distanceMeters / 1000;
+  const kmText = km < 10 ? km.toFixed(1) : km.toFixed(0);
+  return `${kmText} km`;
+}
+
 // Supported options for Google Distance Matrix `units`: "metric" or "imperial".
 // Supported options for `mode` in this endpoint: "driving" or "walking".
 // Note: Traffic-aware fields (duration_in_traffic) are only returned for driving requests with departure_time.
-function buildTrafficSummary({ baseSeconds, liveSeconds, mode }) {
+function buildTrafficSummary({ baseSeconds, liveSeconds, mode, distanceMeters, units }) {
   const liveMin = Math.round(liveSeconds / 60);
   const deltaSec = liveSeconds - baseSeconds;
   const deltaMin = Math.round(deltaSec / 60);
   const ratio = baseSeconds > 0 ? liveSeconds / baseSeconds : 1.0;
 
+  const distanceText = typeof distanceMeters === "number" ? formatDistance(distanceMeters, units) : "";
+
   // For non-driving modes, we don't claim "traffic".
   if (mode !== "driving") {
     return {
       trafficLevel: "n/a",
-      summary: `ETA is about ${liveMin} minutes.`,
+      // summary: `ETA is about ${liveMin} minutes.`,
+      summary: `Distance is about ${distanceText}. ETA is about ${liveMin} minutes on foot.`,
     };
   }
 
@@ -23,19 +46,10 @@ function buildTrafficSummary({ baseSeconds, liveSeconds, mode }) {
   else if (deltaSec <= 600 || ratio < 1.50) trafficLevel = "heavy";
   else trafficLevel = "very heavy";
 
-  if (deltaMin <= 0) {
-    return {
-      trafficLevel,
-      summary: `ETA is about ${liveMin} minutes. Traffic is ${trafficLevel}.`,
-    };
-  }
-
-  let navType = "by car";
-  if (mode === "walking") navType = "on foot";
-
   return {
     trafficLevel,
-    summary: `ETA is about ${liveMin} minutes ${navType}. Traffic is ${trafficLevel} — about ${deltaMin} minutes slower than usual.`,
+    // summary: `ETA is about ${liveMin} minutes ${navType}. Traffic is ${trafficLevel} — about ${deltaMin} minutes slower than usual.`,
+    summary: `ETA is about ${liveMin} minutes. Traffic is ${trafficLevel} — about ${deltaMin} minutes slower than usual. Distance is about ${distanceText}.`,
   };
 }
 
@@ -118,6 +132,8 @@ export function registerGoogleMapsRoutes(app) {
         baseSeconds,
         liveSeconds,
         mode: modeNorm,
+        distanceMeters,
+        units: unitsNorm
         });
 
         return res.status(200).json({
@@ -127,6 +143,7 @@ export function registerGoogleMapsRoutes(app) {
         units: unitsNorm,
         mode: modeNorm,
         distanceMeters,
+        distanceText: formatDistance(distanceMeters, unitsNorm),
         baseSeconds,
         liveSeconds,
         trafficDeltaSeconds: Math.max(0, liveSeconds - baseSeconds),
