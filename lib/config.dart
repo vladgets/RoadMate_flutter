@@ -1,4 +1,5 @@
 import 'services/extra_tools.dart';
+import 'services/memory_store.dart';
 
 
 class Config {
@@ -6,7 +7,7 @@ class Config {
 You are a realtime voice AI assistant helping users on the go.
 
 Personality: warm, witty, quick-talking; conversationally human. 
-When responding in languages that have grammatical gender in verbs like Russian, always use the feminine grammatical form when referring to yourself.
+Grammatical gender: feminine.
 
 Language: mirror user; default English (US). If user switches languages, follow their accent/dialect after one brief confirmation.
 
@@ -21,6 +22,9 @@ If user asks refer to personal information check your memory using "memory_fetch
 WebSearch: Use WebSearch tool for up-to-date or verifiable real-world facts; otherwise answer from knowledge, and never invent facts beyond search results.
 
 Email: When user asks about their emails, use the Gmail search tool to find relevant emails. Use all the search terms in English.
+
+ETA and Navigation: When user asks ETA for a given destination if you can't resolve it to unique address try to check with memory_fetch tool if such address exists in memory
+and only if not then ask user.
 
 Current date: {{CURRENT_DATE_READABLE}}
 ''';
@@ -37,6 +41,30 @@ Current date: {{CURRENT_DATE_READABLE}}
   static String buildSystemPrompt() {
     return systemPromptTemplate.replaceAll('{{CURRENT_DATE_READABLE}}', getCurrentReadableDate());
   }
+
+  /// Build the system prompt with current readable date + user preferences (preferences.txt).
+  /// Preferences are optional and may be empty.
+  static Future<String> buildSystemPromptWithPreferences() async {
+    final base = systemPromptTemplate.replaceAll(
+      '{{CURRENT_DATE_READABLE}}',
+      getCurrentReadableDate(),
+    );
+
+    // Read local preferences file (may be empty / missing).
+    final prefs = await PreferencesStore.readAll();
+
+    // Safety: avoid injecting unbounded text into the system prompt.
+    const maxChars = 5000;
+    final trimmedPrefs = prefs.length > maxChars ? prefs.substring(0, maxChars) : prefs;
+
+    if (trimmedPrefs.trim().isEmpty) return base;
+
+    return '''$base
+
+User Preferences:
+$trimmedPrefs''';
+  }
+
 
   // Tool definitions exposed to the Realtime model.
   // The model may call these by name; your app must execute them and send back

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,7 +18,14 @@ import 'services/gmail_client.dart';
 import 'services/map_navigation.dart';
 
 
-void main() => runApp(const MyApp());
+/// Main entry point (keets app in portrait mode only)
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
+  runApp(const MyApp());
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -206,11 +214,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // IMPORTANT: use the ephemeral key here (NOT your real API key).
     req.headers['Authorization'] = "Bearer $ephemeralKey";
 
+    final instructions = await Config.buildSystemPromptWithPreferences();
+
     // Optional session override; can be minimal if you already set it in /token.
     req.fields['session'] = jsonEncode({
       "type": "realtime",
       "model": Config.model,
-      "instructions": Config.buildSystemPrompt(),
+      "instructions": instructions,
       "tools": Config.tools,
       "tool_choice": "auto",
       "audio": {
@@ -545,6 +555,17 @@ class SettingsScreen extends StatelessWidget {
       ),
       body: ListView(
         children: [
+          ListTile(
+            leading: const Icon(Icons.tune),
+            title: const Text('Preferences'),
+            subtitle: const Text('Edit user preferences (prompt)'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => PreferencesSettingsScreen()),
+              );
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.psychology_alt_outlined),
             title: const Text('Long-term Memory'),
