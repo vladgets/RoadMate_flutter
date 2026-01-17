@@ -141,8 +141,11 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
       // 3) Remote audio track will arrive here.
       // On mobile, WebRTC audio generally plays via native audio output automatically.
-      _pc!.onTrack = (RTCTrackEvent e) {
+      _pc!.onTrack = (RTCTrackEvent e) async {
         if (e.track.kind == 'audio') {
+          // Force loudspeaker on iOS
+          await Helper.setSpeakerphoneOn(true);
+
           setState(() => _status = "Assistant connected. Talk!");
         }
       };

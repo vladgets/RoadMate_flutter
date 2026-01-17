@@ -30,12 +30,10 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/icon/app_icon.png
+    - assets/icon/app_icon_square.png
 
 flutter_icons:
   android: true
   ios: true
-  image_path: "assets/icon/app_icon.png"
+  image_path: "assets/icon/app_icon_square.png"
   remove_alpha_ios: true
-  adaptive_icon_background: "#0B1220"
-  adaptive_icon_foreground: "assets/icon/app_icon_fg.png"  
