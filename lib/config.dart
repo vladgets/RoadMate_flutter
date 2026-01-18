@@ -1,4 +1,5 @@
 import 'services/extra_tools.dart';
+import 'services/memory_store.dart';
 
 
 class Config {
@@ -6,17 +7,17 @@ class Config {
 You are a realtime voice AI assistant helping users on the go.
 
 Personality: warm, witty, quick-talking; conversationally human. 
-When responding in languages that have grammatical gender in verbs like Russian, always use the feminine grammatical form when referring to yourself.
+Grammatical gender: feminine.
 
 Language: mirror user; default English (US). If user switches languages, follow their accent/dialect after one brief confirmation.
 
 Turns: keep responses under ~5s; stop speaking immediately on user audio (barge-in).
 
 Tools: call a function whenever it can answer faster or more accurately than guessing; summarize tool output briefly.
-If user asks about their calendar events, use calendar functions to fetch the content.
+If a tool call requires parameters try to infer from the context or fetch from memory using memory_fetch tool first before asking user for more info.
 
 Memory: You can save facts to long-term memory with "memory_append" when user ask to remember things. 
-When user asks about their saved facts, retrieve them with "memory_fetch" and summarize concisely.
+If user asks refer to personal information check your memory using "memory_fetch" tool.
 
 WebSearch: Use WebSearch tool for up-to-date or verifiable real-world facts; otherwise answer from knowledge, and never invent facts beyond search results.
 
@@ -28,6 +29,9 @@ When user wants to create, update, or delete calendar events, ask clarifying que
 - For deleting: event_id OR (title and start_date) to find the event
 Always confirm the action before executing (e.g., "I'll create a meeting called X at Y time. Should I proceed?").
 CRITICAL: After the user confirms (says "yes", "ok", "да", "хорошо", etc.), you MUST IMMEDIATELY call the corresponding function (create_calendar_event, update_calendar_event, or delete_calendar_event). Do NOT just say you will do it - actually call the function right away. If you said you will update/delete/create an event, you must call the function in the same turn or immediately after confirmation.
+
+ETA and Navigation: When user asks ETA for a given destination if you can't resolve it to unique address try to check with memory_fetch tool if such address exists in memory
+and only if not then ask user.
 
 Current date: {{CURRENT_DATE_READABLE}}
 ''';
@@ -43,6 +47,29 @@ Current date: {{CURRENT_DATE_READABLE}}
   /// Build the system prompt with the current readable date
   static String buildSystemPrompt() {
     return systemPromptTemplate.replaceAll('{{CURRENT_DATE_READABLE}}', getCurrentReadableDate());
+  }
+
+  /// Build the system prompt with current readable date + user preferences (preferences.txt).
+  /// Preferences are optional and may be empty.
+  static Future<String> buildSystemPromptWithPreferences() async {
+    final base = systemPromptTemplate.replaceAll(
+      '{{CURRENT_DATE_READABLE}}',
+      getCurrentReadableDate(),
+    );
+
+    // Read local preferences file (may be empty / missing).
+    final prefs = await PreferencesStore.readAll();
+
+    // Safety: avoid injecting unbounded text into the system prompt.
+    const maxChars = 5000;
+    final trimmedPrefs = prefs.length > maxChars ? prefs.substring(0, maxChars) : prefs;
+
+    if (trimmedPrefs.trim().isEmpty) return base;
+
+    return '''$base
+
+User Preferences:
+$trimmedPrefs''';
   }
 
 
@@ -124,7 +151,7 @@ Current date: {{CURRENT_DATE_READABLE}}
     {
       "type": "function",
       "name": "gmail_search",
-      "description": "Search Gmail using simple fields (voice-friendly). Returns a small list of email cards: from/subject/date/snippet.",
+      "description": "Search Gmail using simple fields. Returns a small list of email cards: from/subject/date/snippet.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -151,7 +178,84 @@ Current date: {{CURRENT_DATE_READABLE}}
         "required": ["message_id"]
       }
     },
+    // traffic ETA tool
+    {
+      "type": "function",
+      "name": "traffic_eta",
+      "description": "Get ETA and traffic summary between current location and a destination. ",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "description":
+                "Destination address",
+          },
+          "route_type": {
+            "type": "string",
+            "enum": ["by_car", "on_foot"],
+            "description": "Route type, defaults to by_car.",
+            "default": "by_car",
+          },
+          "units": {
+            "type": "string",
+            "enum": ["metric", "imperial"],
+            "description": "Distance units, defaults to imperial.",
+            "default": "imperial",
+          },
+        },
+        "required": ["destination"],
+      }
+    },
+    // navigation using existing maps apps
+    {
+      "type": "function",
+      "name": "navigate_to_destination",
+      "description": "Open the phone's Maps app showing a route from current location to a destination.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "description": "Destination address.",
+          },
+          "route_type": {
+            "type": "string",
+            "enum": ["by_car", "on_foot"],
+            "default": "by_car",
+          },
+          "nav_app": {
+            "type": "string",
+            "enum": ["system", "apple", "google", "waze"],
+            "description": "Which navigation app to open. system=platform default.",
+            "default": "system"
+          },
+        },
+        "required": ["destination"],
+      }
+    },
+  // phone call tool
+    {
+      "type": "function",
+      "name": "call_phone",
+      "description": "Place a phone call. Resolve phone number from long-term memory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "phone_number": {
+            "type": "string",
+            "description": "Phone number, e.g. +14085551234",
+          },
+          "contact_name": {
+            "type": "string",
+            "description": "Contact name.",
+          },
+        },
+        "required": ["contact_name", "phone_number"],
+      },
+    }
   ];
+
 
 
   // Deprecated or currently unused tool definitions.

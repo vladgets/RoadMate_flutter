@@ -53,7 +53,7 @@ class StopDetector {
   bool _isInStopAcquisition = false;
   DateTime? _stopStartTime;
   LocationFix? _stopAnchorCandidate;
-  List<LocationFix> _acquisitionPoints = [];
+  final List<LocationFix> _acquisitionPoints = [];
   Timer? _acquisitionTimer;
   Timer? _confirmationTimer;
   String? _currentStopId;

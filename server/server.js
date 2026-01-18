@@ -1,9 +1,11 @@
 import express from "express";
 import { registerGmailRoutes } from "./gmail.js";
+import { registerGoogleMapsRoutes } from "./google_maps.js";
 
 const app = express();
 app.use(express.json());
 registerGmailRoutes(app);
+registerGoogleMapsRoutes(app);
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 

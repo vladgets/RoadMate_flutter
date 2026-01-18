@@ -15,7 +15,7 @@ class TrackBuilder {
   static const double _walkingSimplificationTolerance = 15.0; // метры
   static const double _vehicleSimplificationTolerance = 30.0; // метры
   
-  List<LocationFix> _currentPoints = [];
+  final List<LocationFix> _currentPoints = [];
   LocationFix? _lastAcceptedPoint;
   DateTime? _lastAcceptedTime;
   ActivityState _currentState = ActivityState.still;

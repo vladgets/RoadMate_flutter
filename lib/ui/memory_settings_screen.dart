@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
 import '../services/memory_store.dart';
 
-class MemorySettingsScreen extends StatefulWidget {
-  const MemorySettingsScreen({super.key});
+class TextFileSettingsScreen extends StatefulWidget {
+  final String title;
+  final Future<String> Function() read;
+  final Future<void> Function(String) write;
+
+  const TextFileSettingsScreen({
+    super.key,
+    required this.title,
+    required this.read,
+    required this.write,
+  });
 
   @override
-  State<MemorySettingsScreen> createState() => _MemorySettingsScreenState();
+  State<TextFileSettingsScreen> createState() => _TextFileSettingsScreenState();
 }
 
-class _MemorySettingsScreenState extends State<MemorySettingsScreen> {
+class _TextFileSettingsScreenState extends State<TextFileSettingsScreen> {
   String _memoryText = '';
   bool _loading = true;
 
@@ -30,7 +39,7 @@ class _MemorySettingsScreenState extends State<MemorySettingsScreen> {
 
   Future<void> _refresh() async {
     setState(() => _loading = true);
-    final text = await MemoryStore.readAll();
+    final text = await widget.read();
     setState(() {
       _memoryText = text;
       _loading = false;
@@ -54,7 +63,7 @@ class _MemorySettingsScreenState extends State<MemorySettingsScreen> {
   }
 
   Future<void> _saveEdits() async {
-    await MemoryStore.writeAll(_controller.text);
+    await widget.write(_controller.text);
     setState(() {
       _editing = false;
     });
@@ -65,7 +74,7 @@ class _MemorySettingsScreenState extends State<MemorySettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Long-term Memory'),
+        title: Text(widget.title),
         actions: [
           IconButton(
             tooltip: _editing ? 'Cancel edit' : 'Edit',
@@ -127,6 +136,33 @@ class _MemorySettingsScreenState extends State<MemorySettingsScreen> {
                 ),
               ],
             ),
+    );
+  }
+}
+
+
+class MemorySettingsScreen extends StatelessWidget {
+  const MemorySettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFileSettingsScreen(
+      title: 'Long-term Memory',
+      read: MemoryStore.readAll,
+      write: MemoryStore.writeAll,
+    );
+  }
+}
+
+class PreferencesSettingsScreen extends StatelessWidget {
+  const PreferencesSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFileSettingsScreen(
+      title: 'User Preferences',
+      read: PreferencesStore.readAll,
+      write: PreferencesStore.writeAll,
     );
   }
 }

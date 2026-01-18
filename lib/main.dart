@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'config.dart';
 import 'ui/memory_settings_screen.dart';
 import 'ui/extensions_settings_screen.dart';
@@ -17,8 +19,17 @@ import 'tracking/tracking_manager.dart';
 import 'tracking/ui/tracking_settings_screen.dart';
 import 'tracking/ui/tracking_status_widget.dart';
 import 'tracking/background/background_tracking_service.dart';
+import 'services/map_navigation.dart';
+import 'services/phone_call.dart';
 
-void main() => runApp(const MyApp());
+/// Main entry point (keets app in portrait mode only)
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
+  runApp(const MyApp());
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -138,9 +149,12 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
       // 3) Remote audio track will arrive here.
       // On mobile, WebRTC audio generally plays via native audio output automatically.
-      _pc!.onTrack = (RTCTrackEvent e) {
+      _pc!.onTrack = (RTCTrackEvent e) async {
         if (e.track.kind == 'audio') {
-          setState(() => _status = "Assistant connected (audio ready). Talk!");
+          // Force loudspeaker on iOS
+          await Helper.setSpeakerphoneOn(true);
+
+          setState(() => _status = "Assistant connected. Talk!");
         }
       };
 
@@ -211,11 +225,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     // IMPORTANT: use the ephemeral key here (NOT your real API key).
     req.headers['Authorization'] = "Bearer $ephemeralKey";
 
+    final instructions = await Config.buildSystemPromptWithPreferences();
+
     // Optional session override; can be minimal if you already set it in /token.
     req.fields['session'] = jsonEncode({
       "type": "realtime",
       "model": Config.model,
-      "instructions": Config.buildSystemPrompt(),
+      "instructions": instructions,
       "tools": Config.tools,
       "tool_choice": "auto",
       "audio": {
@@ -420,6 +436,18 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     }
     return await GmailReadEmailTool(client: gmailClient).call(args);
   },
+  // traffic ETA tool
+  'traffic_eta': (args) async {
+    return await handleTrafficEtaToolCall(args);
+  },
+  // open maps route tool
+  'navigate_to_destination': (args) async {
+    return await handleOpenMapsRouteToolCall(args);
+  },
+  // phone call tool
+  'call_phone': (args) async {
+    return await handlePhoneCallTool(args);
+  },
 };
 
   /// Extracts tool name + arguments from an event, runs the handler,
@@ -599,6 +627,17 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         children: [
           ListTile(
+            leading: const Icon(Icons.tune),
+            title: const Text('Preferences'),
+            subtitle: const Text('Edit user preferences (prompt)'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => PreferencesSettingsScreen()),
+              );
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.psychology_alt_outlined),
             title: const Text('Long-term Memory'),
             subtitle: const Text('View and manage stored memory'),
@@ -643,20 +682,49 @@ class SettingsScreen extends StatelessWidget {
           ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.science_outlined),
-            title: const Text('Testing'),
-            subtitle: const Text('Run Gmail test (logs only)'),
-            trailing: const Icon(Icons.play_arrow),
-            onTap: () {
-              ClientIdStore.getOrCreate().then((cid) {
-                testGmailClient(GmailClient(baseUrl: Config.serverUrl, clientId: cid));
-              });
+            leading: const Icon(Icons.chat_bubble_outline),
+            title: const Text('Test WhatsApp'),
+            subtitle: const Text('Open WhatsApp with a prefilled message'),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () async {
+              await testWhatsApp();
+              // Close settings screen after launching.
+              // ignore: use_build_context_synchronously
               Navigator.of(context).maybePop();
             },
           ),
         ],
       ),
     );
+  }
+}
+
+/// Opens WhatsApp with a prefilled message.
+/// Note: WhatsApp generally requires the user to tap Send.
+Future<void> testWhatsApp() async {
+  const text = 'RoadMate app is great!';
+  const phone = '14084552967';
+
+  // Option A: Native WhatsApp scheme (best on Android if WhatsApp is installed)
+  final native = Uri.parse('whatsapp://send?phone=$phone&text=${Uri.encodeComponent(text)}');
+
+  // Option B: Universal web link fallback (works even if native scheme fails)
+  // You can also target a specific phone number with: https://wa.me/<number>?text=...
+  final web = Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(text)}');
+
+  try {
+    if (await canLaunchUrl(native)) {
+      final ok = await launchUrl(native, mode: LaunchMode.externalApplication);
+      if (ok) return;
+    }
+  } catch (_) {
+    // ignore and fall back
+  }
+
+  // Fallback
+  final ok = await launchUrl(web, mode: LaunchMode.externalApplication);
+  if (!ok) {
+    throw Exception('Could not launch WhatsApp. Is it installed and available on this device?');
   }
 }
 

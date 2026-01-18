@@ -1,24 +1,28 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
-class MemoryStore {
-  static const String _fileName = 'roadmate_memory.txt';
+class _LocalTextFile {
+  final String fileName;
+  const _LocalTextFile(this.fileName);
 
-  static Future<File> _file() async {
+  Future<File> file() async {
     final dir = await getApplicationDocumentsDirectory();
-    return File('${dir.path}/$_fileName');
+    return File('${dir.path}/$fileName');
   }
 
-  static Future<String> readAll() async {
-    final f = await _file();
-    if (!await f.exists()) return '';
+  Future<bool> exists() async {
+    final f = await file();
+    return f.exists();
+  }
+
+  Future<String> readAll({String ifMissing = ''}) async {
+    final f = await file();
+    if (!await f.exists()) return ifMissing;
     return f.readAsString();
   }
 
-  /// Overwrite the entire memory file with the provided text.
-  /// Normalizes line endings and ensures a trailing newline when non-empty.
-  static Future<void> writeAll(String text) async {
-    final f = await _file();
+  Future<void> writeAll(String text) async {
+    final f = await file(); 
 
     // Normalize Windows CRLF to LF for consistency
     var normalized = text.replaceAll('\r\n', '\n');
@@ -31,22 +35,44 @@ class MemoryStore {
     await f.writeAsString(normalized, mode: FileMode.write, flush: true);
   }
 
-  static Future<void> appendLine(String text) async {
-    final line = _sanitizeOneLine(text);
-    final f = await _file();
+  Future<void> appendLine(String line) async {
+    final f = await file();
     await f.writeAsString('$line\n', mode: FileMode.append, flush: true);
   }
 
+  Future<void> clear() async {
+    final f = await file();
+    if (await f.exists()) {
+      await f.writeAsString('', mode: FileMode.write, flush: true);
+    }
+  }
+}
+
+class MemoryStore {
+  static const _LocalTextFile _store = _LocalTextFile('roadmate_memory.txt');
+
+  static Future<String> readAll() async {
+    return _store.readAll(ifMissing: '');
+  }
+
+  /// Overwrite the entire memory file with the provided text.
+  /// Normalizes line endings and ensures a trailing newline when non-empty.
+  static Future<void> writeAll(String text) async {
+    await _store.writeAll(text);
+  }
+
+  static Future<void> appendLine(String text) async {
+    final line = _sanitizeOneLine(text);
+    await _store.appendLine(line);
+  }
+
   static Future<void> overwrite(String text) async {
-    final f = await _file();
+    final f = await _store.file();
     await f.writeAsString(text, mode: FileMode.write, flush: true);
   }
 
   static Future<void> clear() async {
-    final f = await _file();
-    if (await f.exists()) {
-      await f.writeAsString('', mode: FileMode.write, flush: true);
-    }
+    await _store.clear();
   }
 
   static String _sanitizeOneLine(String s) {
@@ -86,5 +112,24 @@ class MemoryStore {
       'bytes': text.codeUnits.length,
     };
   }
-
 }
+
+class PreferencesStore {
+  static const _LocalTextFile _store = _LocalTextFile('roadmate_preferences.txt');
+
+  /// Returns the preferences text; if the file doesn't exist yet, returns an empty string.
+  static Future<String> readAll() async {
+    return _store.readAll(ifMissing: '');
+  }
+
+  /// Overwrite the entire preferences file with the provided text.
+  /// Normalizes line endings and ensures a trailing newline when non-empty.
+  static Future<void> writeAll(String text) async {
+    await _store.writeAll(text);
+  }
+
+  static Future<void> clear() async {
+    await _store.clear();
+  }
+}
+

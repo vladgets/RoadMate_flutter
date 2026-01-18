@@ -213,7 +213,7 @@ class _TrackingHistoryScreenState extends State<TrackingHistoryScreen> {
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.green.withOpacity(0.2),
+            color: Colors.green.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(8),
           ),
           child: const Icon(Icons.play_arrow, size: 24, color: Colors.green),
@@ -281,7 +281,7 @@ class _TrackingHistoryScreenState extends State<TrackingHistoryScreen> {
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: _getStateColor(oldState).withOpacity(0.2),
+                color: _getStateColor(oldState).withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: _getStateIcon(oldState),
@@ -293,7 +293,7 @@ class _TrackingHistoryScreenState extends State<TrackingHistoryScreen> {
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: _getStateColor(newState).withOpacity(0.2),
+                color: _getStateColor(newState).withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: _getStateIcon(newState),

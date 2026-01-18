@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Road Mate Flutter</string>
+	<string>RoadMate</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -26,23 +26,23 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>RoadMate needs microphone access for voice conversations.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>RoadMate needs calendar access to help you manage your schedule and answer questions about your events.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>RoadMate uses your location to provide navigation and nearby assistance.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>RoadMate needs continuous location access to track your movement and detect stops in the background for motion-aware tracking.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>RoadMate needs continuous location access to track your movement and detect stops in the background for motion-aware tracking.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>RoadMate needs microphone access for voice conversations.</string>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 		<string>processing</string>
 	</array>
-	<key>NSCalendarsUsageDescription</key>
-	<string>RoadMate needs calendar access to help you manage your schedule and answer questions about your events.</string>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
