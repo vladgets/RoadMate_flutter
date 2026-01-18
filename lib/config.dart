@@ -34,6 +34,33 @@ ETA and Navigation: When user asks ETA for a given destination if you can't reso
 and only if not then ask user.
 
 Current date: {{CURRENT_DATE_READABLE}}
+
+--------------------------------
+
+Location Arrival:
+The user may send system-style messages in the following format:
+"The current time is <date/time>, I have arrived at this geolocation <latitude, longitude>."
+
+When such a message is received:
+1. Treat it as a reliable signal that the user has physically arrived at the given coordinates at the specified time.
+2. Resolve the user's current location by:
+   - Interpreting the coordinates.
+   - Checking long-term memory using memory_fetch for any saved places (home, work, frequent locations, named places, previous mentions) within a 100-meter radius.
+3. If a known location is found within the radius:
+   - Internally associate the arrival with that location.
+   - Optionally reference it naturally in conversation (e.g., “Looks like you’re back near your gym”).
+4. If no known location is found:
+   - Treat the place as unknown and do not invent labels or facts.
+5. After resolving (or failing to resolve) the location, immediately ask the user a short, conversational clarifying question about their purpose at this location.
+   - Examples:
+     - “What brings you here today?”
+     - “Are you here for work, errands, or something else?”
+     - “What’s the plan at this spot?”
+
+Guidelines:
+- Assume a location radius tolerance of 100 meters.
+- Keep the follow-up question brief and natural, suitable for voice interaction.
+- Do not mention coordinates, radius, or internal memory checks aloud.
 ''';
 
   static const String model = "gpt-realtime-mini-2025-12-15";

@@ -21,6 +21,7 @@ import 'tracking/ui/tracking_status_widget.dart';
 import 'tracking/background/background_tracking_service.dart';
 import 'services/map_navigation.dart';
 import 'services/phone_call.dart';
+import 'services/realtime_session_manager.dart';
 
 /// Main entry point (keets app in portrait mode only)
 Future<void> main() async {
@@ -95,6 +96,8 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
     TrackingManager.instance.initialize();
     // Инициализируем фоновый сервис для работы при заблокированном экране
     BackgroundTrackingService.instance.initialize();
+    // Регистрируем callback для подключения Realtime сессии
+    RealtimeSessionManager.instance.registerConnectCallback(() => _connect());
     // Ensure we have a stable client id for Gmail token storage on the server.
     ClientIdStore.getOrCreate().then((cid) {
       _clientId = cid;
@@ -171,9 +174,15 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       // 5) Data channel (optional but useful for session updates / events)
       _dc = await _pc!.createDataChannel("oai-events", RTCDataChannelInit());
 
+      // Регистрируем data channel в RealtimeSessionManager
+      RealtimeSessionManager.instance.registerDataChannel(_dc);
+
       _dc!.onDataChannelState = (RTCDataChannelState state) {
         debugPrint("DataChannel state: $state");
-
+        // Обновляем регистрацию в RealtimeSessionManager при изменении состояния
+        if (state == RTCDataChannelState.RTCDataChannelOpen) {
+          RealtimeSessionManager.instance.registerDataChannel(_dc);
+        }
       };
 
       _dc!.onMessage = (RTCDataChannelMessage msg) {
@@ -204,6 +213,12 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
         _connected = true;
         _status = "Connected. Talk!";
       });
+      
+      // Уведомляем RealtimeSessionManager о готовности сессии
+      // (data channel уже зарегистрирован, но состояние может измениться)
+      if (_dc != null) {
+        RealtimeSessionManager.instance.registerDataChannel(_dc);
+      }
     } catch (e) {
       await _disconnect();
       setState(() {
@@ -256,6 +271,9 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
   Future<void> _disconnect() async {
     try {
+      // Уведомляем RealtimeSessionManager об отключении
+      RealtimeSessionManager.instance.registerDataChannel(null);
+      
       await _dc?.close();
       await _pc?.close();
 

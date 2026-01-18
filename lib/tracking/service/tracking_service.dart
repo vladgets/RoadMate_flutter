@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../services/realtime_session_manager.dart';
 import '../core/activity_provider.dart';
 import '../core/location_provider.dart';
 import '../core/state_machine.dart';
@@ -221,6 +222,12 @@ class TrackingService {
     );
     _eventQueue.enqueue(trackingEvent);
     
+    // Обрабатываем переход с IN_VEHICLE на STILL или WALKING
+    if (event.oldState == ActivityState.inVehicle &&
+        (event.newState == ActivityState.still || event.newState == ActivityState.walking)) {
+      _handleArrival(event.timestamp);
+    }
+    
     // Обрабатываем переходы состояний
     if (event.newState == ActivityState.still) {
       _handleStateChangedToStill(event.oldState, event.timestamp);
@@ -235,6 +242,34 @@ class TrackingService {
       lastLocationLon: _lastLocation?.longitude,
       confidence: event.confidence,
     );
+  }
+  
+  /// Обработать прибытие (переход с IN_VEHICLE на STILL или WALKING)
+  void _handleArrival(DateTime timestamp) {
+    if (_lastLocation == null) {
+      // ignore: avoid_print
+      print('[TrackingService] Cannot send arrival message: location not available');
+      return;
+    }
+    
+    // Формируем сообщение с временем (ISO 8601) и координатами
+    final currentTime = timestamp.toIso8601String();
+    final locationCoords = '${_lastLocation!.latitude}, ${_lastLocation!.longitude}';
+    final message = 'The current time is $currentTime, I have arrived at this geolocation $locationCoords.';
+    
+    // Отправляем сообщение в Realtime сессию (асинхронно, не блокируем трекинг)
+    RealtimeSessionManager.instance.sendTextMessage(message).then((success) {
+      if (success) {
+        // ignore: avoid_print
+        print('[TrackingService] Arrival message sent to Realtime session');
+      } else {
+        // ignore: avoid_print
+        print('[TrackingService] Failed to send arrival message to Realtime session');
+      }
+    }).catchError((error) {
+      // ignore: avoid_print
+      print('[TrackingService] Error sending arrival message: $error');
+    });
   }
   
   void _handleStateChangedToStill(ActivityState previousState, DateTime timestamp) {
