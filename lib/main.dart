@@ -16,6 +16,7 @@ import 'services/calendar_store.dart';
 import 'services/web_search.dart';
 import 'services/gmail_client.dart';
 import 'services/map_navigation.dart';
+import 'services/phone_call.dart';
 
 
 /// Main entry point (keets app in portrait mode only)
@@ -394,6 +395,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   // open maps route tool
   'navigate_to_destination': (args) async {
     return await handleOpenMapsRouteToolCall(args);
+  },
+  // phone call tool
+  'call_phone': (args) async {
+    return await handlePhoneCallTool(args);
   },
 };
 

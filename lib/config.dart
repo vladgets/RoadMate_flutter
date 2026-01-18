@@ -217,11 +217,38 @@ $trimmedPrefs''';
             "enum": ["by_car", "on_foot"],
             "default": "by_car",
           },
+          "nav_app": {
+            "type": "string",
+            "enum": ["system", "apple", "google", "waze"],
+            "description": "Which navigation app to open. system=platform default.",
+            "default": "system"
+          },
         },
         "required": ["destination"],
       }
+    },
+  // phone call tool
+    {
+      "type": "function",
+      "name": "call_phone",
+      "description": "Place a phone call. Resolve phone number from long-term memory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "phone_number": {
+            "type": "string",
+            "description": "Phone number, e.g. +14085551234",
+          },
+          "contact_name": {
+            "type": "string",
+            "description": "Contact name.",
+          },
+        },
+        "required": ["contact_name", "phone_number"],
+      },
     }
   ];
+
 
 
   // Deprecated or currently unused tool definitions.

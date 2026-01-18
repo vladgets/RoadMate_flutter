@@ -93,6 +93,9 @@ Future<Map<String, dynamic>> handleOpenMapsRouteToolCall(Map<String, dynamic> ar
   }
 
   final routeType = (args["route_type"] as String?) ?? "by_car";
+  // Optional: choose which navigation app to open for iOS.
+  // Supported values: "system" (default), "apple", "google", "waze"
+  final navApp = ((args["nav_app"] as String?) ?? "system").toLowerCase();
   final encodedDest = Uri.encodeComponent(destination);
 
   Uri launchUri;
@@ -107,12 +110,25 @@ Future<Map<String, dynamic>> handleOpenMapsRouteToolCall(Map<String, dynamic> ar
       "google.navigation:q=$encodedDest&mode=$mode",
     );
   } else if (Platform.isIOS) {
-    // 🔹 iOS: Apple Maps (system default)
-    final dirFlag = routeType == "on_foot" ? "w" : "d";
+    // iOS: Apple Maps / Google Maps / Waze handoff via URL schemes or universal links.
+    final isWalking = routeType == "on_foot";
 
-    launchUri = Uri.parse(
-      "http://maps.apple.com/?daddr=$encodedDest&dirflg=$dirFlag",
-    );
+    if (navApp == "google") {
+      // Google Maps URL scheme (requires Google Maps installed)
+      // directionsmode: driving | walking | bicycling | transit
+      final mode = isWalking ? "walking" : "driving";
+      launchUri = Uri.parse(
+        "comgooglemaps://?daddr=$encodedDest&directionsmode=$mode",
+      );
+      // If Google Maps isn't installed, we'll fall back later.
+    } else if (navApp == "waze") {
+      // Waze deep links (universal link). Opens Waze if installed, otherwise a web flow.
+      launchUri = Uri.parse("https://waze.com/ul?q=$encodedDest&navigate=yes");
+    } else {
+      // Apple Maps (works on all iOS devices)
+      final dirFlag = isWalking ? "w" : "d";
+      launchUri = Uri.parse("http://maps.apple.com/?daddr=$encodedDest&dirflg=$dirFlag");
+    }
   } else {
     return {"ok": false, "error": "Unsupported platform"};
   }

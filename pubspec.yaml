@@ -20,6 +20,8 @@ dependencies:
   timezone: ^0.9.4
   intl: ^0.19.0
   url_launcher: ^6.3.0
+  permission_handler: ^11.3.0
+  android_intent_plus: ^5.1.0
 
 dev_dependencies:
   flutter_test:
@@ -31,9 +33,14 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon/app_icon_square.png
+    - assets/icon/app_icon_round.png
 
 flutter_icons:
   android: true
   ios: true
+  # iPhgone
   image_path: "assets/icon/app_icon_square.png"
   remove_alpha_ios: true
+  # Android
+  adaptive_icon_foreground: assets/icon/app_icon_round.png
+  adaptive_icon_background: "#4A90E2"  # example blue
