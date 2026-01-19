@@ -22,6 +22,7 @@ import 'tracking/background/background_tracking_service.dart';
 import 'services/map_navigation.dart';
 import 'services/phone_call.dart';
 import 'services/realtime_session_manager.dart';
+import 'services/screen_wake_service.dart';
 
 /// Main entry point (keets app in portrait mode only)
 Future<void> main() async {
@@ -29,11 +30,25 @@ Future<void> main() async {
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
+  // Инициализируем сервис для управления wake lock
+  await ScreenWakeService.instance.initialize();
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void dispose() {
+    // Освобождаем ресурсы wake lock при закрытии приложения
+    ScreenWakeService.instance.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +88,7 @@ class ClientIdStore {
 }
 
 
-class _VoiceButtonPageState extends State<VoiceButtonPage> {
+class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingObserver {
   RTCPeerConnection? _pc;
   RTCDataChannel? _dc;
   MediaStream? _mic;
@@ -92,6 +107,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   @override
   void initState() {
     super.initState();
+    // Подписываемся на изменения жизненного цикла приложения
+    WidgetsBinding.instance.addObserver(this);
+    // Уведомляем сервис, что приложение на переднем плане
+    ScreenWakeService.instance.onAppResumed();
     // Инициализируем трекинг при старте приложения
     TrackingManager.instance.initialize();
     // Инициализируем фоновый сервис для работы при заблокированном экране
@@ -114,9 +133,29 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _webSearchClient.close();
     _disconnect();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    switch (state) {
+      case AppLifecycleState.resumed:
+        ScreenWakeService.instance.onAppResumed();
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        ScreenWakeService.instance.onAppPaused();
+        break;
+      case AppLifecycleState.hidden:
+        // iOS 15+ состояние
+        ScreenWakeService.instance.onAppPaused();
+        break;
+    }
   }
 
   Future<void> _toggle() async {
