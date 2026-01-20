@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter/foundation.dart';
 import '../models/location_fix.dart';
 
 /// Профили геолокации для разных режимов работы
@@ -24,10 +26,15 @@ class LocationProvider {
   LocationSettings? _currentSettings;
   bool _isRunning = false;
   
-  // Параметры профилей
-  static const double _activeMovementDistanceFilter = 30.0; // метры
-  static const double _stopAcquisitionDistanceFilter = 5.0; // метры
-  static const double _idleDistanceFilter = 50.0; // метры
+  // Параметры профилей - Distance Filter (метры)
+  static const double _activeMovementDistanceFilter = 30.0;
+  static const double _stopAcquisitionDistanceFilter = 5.0;
+  static const double _idleDistanceFilter = 50.0;
+  
+  // Параметры профилей - Interval (секунды) для периодических обновлений в спящем режиме
+  static const int _activeMovementIntervalSeconds = 5;
+  static const int _stopAcquisitionIntervalSeconds = 3;
+  static const int _idleIntervalSeconds = 60; // Даже в idle периодически пробуждаемся
   
   Stream<LocationFix> get locationStream => _locationController.stream;
   
@@ -76,11 +83,10 @@ class LocationProvider {
       }
     }
     
-    // Определяем настройки для текущего профиля
+    // Определяем настройки для текущего профиля (платформенно-специфичные)
     _currentSettings = _getSettingsForProfile(_currentProfile);
     
     // Начинаем слушать обновления позиции
-    // Используем allowBackgroundLocationUpdates для работы в фоне
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: _currentSettings!,
     ).listen(
@@ -119,28 +125,61 @@ class LocationProvider {
   }
   
   LocationSettings _getSettingsForProfile(LocationProfile profile) {
+    // Выбираем параметры в зависимости от профиля
+    final double distanceFilter;
+    final int intervalSeconds;
+    final LocationAccuracy accuracy;
+    
     switch (profile) {
       case LocationProfile.activeMovement:
-        return LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: _activeMovementDistanceFilter.toInt(),
-          timeLimit: null,
-        );
+        distanceFilter = _activeMovementDistanceFilter;
+        intervalSeconds = _activeMovementIntervalSeconds;
+        accuracy = LocationAccuracy.high;
         
       case LocationProfile.stopAcquisition:
-        return LocationSettings(
-          accuracy: LocationAccuracy.best,
-          distanceFilter: _stopAcquisitionDistanceFilter.toInt(),
-          timeLimit: null,
-        );
+        distanceFilter = _stopAcquisitionDistanceFilter;
+        intervalSeconds = _stopAcquisitionIntervalSeconds;
+        accuracy = LocationAccuracy.best;
         
       case LocationProfile.idle:
-        return LocationSettings(
-          accuracy: LocationAccuracy.low,
-          distanceFilter: _idleDistanceFilter.toInt(),
-          timeLimit: null,
-        );
+        distanceFilter = _idleDistanceFilter;
+        intervalSeconds = _idleIntervalSeconds;
+        accuracy = LocationAccuracy.low;
     }
+    
+    // Используем платформенно-специфичные настройки для корректной работы в фоне
+    if (!kIsWeb && Platform.isAndroid) {
+      return AndroidSettings(
+        accuracy: accuracy,
+        distanceFilter: distanceFilter.toInt(),
+        // Критически важно для работы в спящем режиме:
+        // intervalDuration гарантирует периодические обновления даже без движения
+        intervalDuration: Duration(seconds: intervalSeconds),
+        // Foreground service notification для поддержания сервиса активным
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'RoadMate Tracking',
+          notificationText: 'Tracking your location in background',
+          notificationChannelName: 'Location Tracking',
+          enableWakeLock: true, // Wake lock предотвращает засыпание
+        ),
+      );
+    } else if (!kIsWeb && Platform.isIOS) {
+      return AppleSettings(
+        accuracy: accuracy,
+        distanceFilter: distanceFilter.toInt(),
+        // Важные настройки для iOS background location:
+        activityType: ActivityType.automotiveNavigation, // Оптимально для вождения
+        pauseLocationUpdatesAutomatically: false, // НЕ приостанавливать автоматически
+        showBackgroundLocationIndicator: true, // Синий индикатор в статус-баре
+        allowBackgroundLocationUpdates: true, // Разрешить фоновые обновления
+      );
+    }
+    
+    // Fallback для других платформ
+    return LocationSettings(
+      accuracy: accuracy,
+      distanceFilter: distanceFilter.toInt(),
+    );
   }
   
   /// Получить текущую позицию (одноразовый запрос)

@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 import '../../services/realtime_session_manager.dart';
+import '../../services/callkit_service.dart';
 import '../core/activity_provider.dart';
 import '../core/location_provider.dart';
 import '../core/state_machine.dart';
@@ -257,7 +259,29 @@ class TrackingService {
     final locationCoords = '${_lastLocation!.latitude}, ${_lastLocation!.longitude}';
     final message = 'The current time is $currentTime, I have arrived at this geolocation $locationCoords.';
     
-    // Отправляем сообщение в Realtime сессию (асинхронно, не блокируем трекинг)
+    // На iOS используем CallKit для показа входящего "звонка"
+    // Это позволяет аудио работать при заблокированном экране
+    if (Platform.isIOS) {
+      CallKitService.instance.showIncomingCall(
+        message: message,
+        locationName: 'Arrived at destination',
+      ).then((_) {
+        // ignore: avoid_print
+        print('[TrackingService] CallKit incoming call displayed');
+      }).catchError((error) {
+        // ignore: avoid_print
+        print('[TrackingService] CallKit error: $error, falling back to direct message');
+        // Fallback: отправляем напрямую
+        _sendDirectMessage(message);
+      });
+    } else {
+      // На Android отправляем сообщение напрямую
+      _sendDirectMessage(message);
+    }
+  }
+  
+  /// Отправить сообщение напрямую в Realtime сессию
+  void _sendDirectMessage(String message) {
     RealtimeSessionManager.instance.sendTextMessage(message).then((success) {
       if (success) {
         // ignore: avoid_print

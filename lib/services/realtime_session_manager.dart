@@ -2,8 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'realtime_connection_service.dart';
 
 /// Менеджер для управления Realtime сессией и отправки сообщений
+/// 
+/// Этот класс служит интерфейсом для отправки сообщений в Realtime сессию.
+/// Он использует RealtimeConnectionService для фактического подключения,
+/// что позволяет работать в фоновом режиме без зависимости от UI.
 class RealtimeSessionManager {
   static RealtimeSessionManager? _instance;
   static RealtimeSessionManager get instance {
@@ -14,26 +19,57 @@ class RealtimeSessionManager {
   RealtimeSessionManager._();
 
   RTCDataChannel? _dataChannel;
+  // Deprecated: используется для обратной совместимости с UI
   Future<void> Function()? _connectCallback;
   final List<String> _pendingMessages = [];
   bool _isConnecting = false;
   final Duration _connectionTimeout = const Duration(seconds: 30);
+  
+  // Флаг, определяющий использовать ли RealtimeConnectionService
+  // или legacy callback
+  bool _useConnectionService = true;
+  
+  // Флаг для отслеживания успешной отправки сообщений
+  // (для предотвращения race condition между registerDataChannel и _waitForConnectionAndSend)
+  bool _messagesSentViaCallback = false;
 
   /// Зарегистрировать data channel
   void registerDataChannel(RTCDataChannel? dc) {
     _dataChannel = dc;
-    if (dc != null) {
+    if (dc != null && dc.state == RTCDataChannelState.RTCDataChannelOpen) {
       // Если есть ожидающие сообщения, отправляем их
-      _processPendingMessages();
-    } else {
+      if (_pendingMessages.isNotEmpty) {
+        _processPendingMessagesAndTrack();
+      }
+    } else if (dc == null) {
       // Очищаем pending messages при отключении
       _pendingMessages.clear();
+      _messagesSentViaCallback = false;
+    }
+  }
+  
+  /// Обработать сообщения и отметить что они отправлены
+  Future<void> _processPendingMessagesAndTrack() async {
+    final sent = await _processPendingMessages();
+    if (sent) {
+      _messagesSentViaCallback = true;
     }
   }
 
-  /// Зарегистрировать callback для подключения
-  void registerConnectCallback(Future<void> Function() connectFn) {
+  /// Зарегистрировать callback для подключения (legacy, для UI)
+  /// 
+  /// Если callback зарегистрирован, он будет использоваться вместо
+  /// RealtimeConnectionService когда UI активен.
+  void registerConnectCallback(Future<void> Function()? connectFn) {
     _connectCallback = connectFn;
+  }
+  
+  /// Включить/выключить использование RealtimeConnectionService
+  /// 
+  /// При false будет использоваться legacy callback (для UI).
+  /// При true будет использоваться RealtimeConnectionService (для фона).
+  void setUseConnectionService(bool value) {
+    _useConnectionService = value;
   }
 
   /// Проверить, подключена ли сессия
@@ -44,6 +80,9 @@ class RealtimeSessionManager {
 
   /// Отправить текстовое сообщение в Realtime сессию
   /// Возвращает true если сообщение успешно отправлено, false в противном случае
+  /// 
+  /// Если сессия не подключена, автоматически подключается через 
+  /// RealtimeConnectionService (может работать в фоновом режиме).
   Future<bool> sendTextMessage(String text) async {
     // Если сессия уже подключена, отправляем сразу
     if (isConnected()) {
@@ -58,17 +97,27 @@ class RealtimeSessionManager {
       return await _waitForConnectionAndSend();
     }
 
-    // Запускаем новую сессию
-    if (_connectCallback == null) {
-      debugPrint('[RealtimeSessionManager] Connect callback not registered');
-      _pendingMessages.removeLast(); // Удаляем сообщение из очереди
-      return false;
-    }
-
     _isConnecting = true;
     try {
-      // Запускаем подключение
-      await _connectCallback!();
+      // Выбираем способ подключения
+      if (_useConnectionService) {
+        // Используем RealtimeConnectionService (работает в фоне)
+        debugPrint('[RealtimeSessionManager] Connecting via RealtimeConnectionService...');
+        final connected = await RealtimeConnectionService.instance.connect();
+        if (!connected) {
+          debugPrint('[RealtimeSessionManager] RealtimeConnectionService failed to connect');
+          _pendingMessages.clear();
+          return false;
+        }
+      } else if (_connectCallback != null) {
+        // Legacy: используем callback (требует UI)
+        debugPrint('[RealtimeSessionManager] Connecting via legacy callback...');
+        await _connectCallback!();
+      } else {
+        debugPrint('[RealtimeSessionManager] No connection method available');
+        _pendingMessages.removeLast();
+        return false;
+      }
       
       // Ждем подключения и отправляем сообщения
       return await _waitForConnectionAndSend();
@@ -95,8 +144,20 @@ class RealtimeSessionManager {
       await Future.delayed(const Duration(milliseconds: 100));
     }
 
-    // Отправляем все ожидающие сообщения
-    return await _processPendingMessages();
+    // Проверяем, были ли сообщения уже отправлены через callback registerDataChannel
+    if (_messagesSentViaCallback) {
+      _messagesSentViaCallback = false; // Сбрасываем флаг
+      return true;
+    }
+    
+    // Если сообщения ещё не отправлены, отправляем их
+    if (_pendingMessages.isNotEmpty) {
+      return await _processPendingMessages();
+    }
+    
+    // Если список пуст и флаг не установлен — странная ситуация, но считаем успехом
+    // (сообщения могли быть отправлены где-то ещё)
+    return true;
   }
 
   /// Обработать и отправить все ожидающие сообщения

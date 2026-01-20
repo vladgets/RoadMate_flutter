@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../tracking_manager.dart';
 import '../models/activity_state.dart';
 
@@ -33,10 +36,18 @@ class BackgroundTrackingService {
         onStart: onStart,
         autoStart: false,
         isForegroundMode: true,
+        autoStartOnBoot: true, // Автозапуск после перезагрузки
         notificationChannelId: 'roadmate_tracking',
         initialNotificationTitle: 'RoadMate Tracking',
         initialNotificationContent: 'Tracking your location',
         foregroundServiceNotificationId: 888,
+        // Foreground service types для работы в Doze Mode
+        // location - для геотрекинга
+        // microphone - для голосового ассистента при прибытии
+        foregroundServiceTypes: [
+          AndroidForegroundType.location,
+          AndroidForegroundType.microphone,
+        ],
       ),
       iosConfiguration: IosConfiguration(
         autoStart: false,
@@ -70,6 +81,17 @@ class BackgroundTrackingService {
       await initialize();
     }
     
+    // Включаем wakelock чтобы экран не засыпал полностью
+    // Это помогает поддерживать сервис активным на некоторых устройствах
+    try {
+      if (Platform.isAndroid || Platform.isIOS) {
+        await WakelockPlus.enable();
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('Failed to enable wakelock: $e');
+    }
+    
     // Запускаем фоновый сервис
     final service = FlutterBackgroundService();
     await service.startService();
@@ -81,6 +103,16 @@ class BackgroundTrackingService {
   /// Остановить фоновый трекинг
   /// Примечание: TrackingService должен быть остановлен через TrackingManager отдельно
   Future<void> stop() async {
+    // Отключаем wakelock
+    try {
+      if (Platform.isAndroid || Platform.isIOS) {
+        await WakelockPlus.disable();
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('Failed to disable wakelock: $e');
+    }
+    
     // Останавливаем фоновый сервис
     final service = FlutterBackgroundService();
     final isRunning = await service.isRunning();
@@ -118,6 +150,42 @@ class BackgroundTrackingService {
   Future<bool> isRunning() async {
     final service = FlutterBackgroundService();
     return await service.isRunning();
+  }
+  
+  /// Запросить отключение оптимизации батареи (только Android)
+  /// Это критически важно для работы в Doze Mode
+  /// Возвращает true если разрешение получено или не требуется
+  Future<bool> requestBatteryOptimizationExemption() async {
+    if (!Platform.isAndroid) return true;
+    
+    try {
+      // Проверяем текущий статус
+      final status = await Permission.ignoreBatteryOptimizations.status;
+      
+      if (status.isGranted) {
+        return true;
+      }
+      
+      // Запрашиваем разрешение
+      final result = await Permission.ignoreBatteryOptimizations.request();
+      return result.isGranted;
+    } catch (e) {
+      // ignore: avoid_print
+      print('Failed to request battery optimization exemption: $e');
+      return false;
+    }
+  }
+  
+  /// Проверить, отключена ли оптимизация батареи
+  Future<bool> isBatteryOptimizationDisabled() async {
+    if (!Platform.isAndroid) return true;
+    
+    try {
+      final status = await Permission.ignoreBatteryOptimizations.status;
+      return status.isGranted;
+    } catch (e) {
+      return false;
+    }
   }
 }
 

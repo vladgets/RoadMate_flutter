@@ -22,7 +22,9 @@ import 'tracking/background/background_tracking_service.dart';
 import 'services/map_navigation.dart';
 import 'services/phone_call.dart';
 import 'services/realtime_session_manager.dart';
+import 'services/realtime_connection_service.dart';
 import 'services/screen_wake_service.dart';
+import 'services/callkit_service.dart';
 
 /// Main entry point (keets app in portrait mode only)
 Future<void> main() async {
@@ -32,6 +34,8 @@ Future<void> main() async {
   ]);
   // Инициализируем сервис для управления wake lock
   await ScreenWakeService.instance.initialize();
+  // Инициализируем CallKit для входящих "звонков" при прибытии
+  await CallKitService.instance.initialize();
   runApp(const MyApp());
 }
 
@@ -115,8 +119,26 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     TrackingManager.instance.initialize();
     // Инициализируем фоновый сервис для работы при заблокированном экране
     BackgroundTrackingService.instance.initialize();
-    // Регистрируем callback для подключения Realtime сессии
+    
+    // Настраиваем RealtimeConnectionService для обработки событий
+    RealtimeConnectionService.instance.registerEventHandler(handleOaiEvent);
+    RealtimeConnectionService.instance.registerStatusCallback((status) {
+      if (mounted) {
+        setState(() => _status = status);
+      }
+    });
+    RealtimeConnectionService.instance.registerErrorCallback((error) {
+      if (mounted) {
+        setState(() => _error = error);
+      }
+    });
+    
+    // Регистрируем legacy callback для обратной совместимости
+    // (используется когда UI активен и пользователь вручную подключается)
     RealtimeSessionManager.instance.registerConnectCallback(() => _connect());
+    // При фоновом подключении используем RealtimeConnectionService
+    RealtimeSessionManager.instance.setUseConnectionService(true);
+    
     // Ensure we have a stable client id for Gmail token storage on the server.
     ClientIdStore.getOrCreate().then((cid) {
       _clientId = cid;
@@ -135,6 +157,9 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _webSearchClient.close();
+    // Очищаем callbacks чтобы они не ссылались на disposed виджет
+    RealtimeConnectionService.instance.registerStatusCallback(null);
+    RealtimeConnectionService.instance.registerErrorCallback(null);
     _disconnect();
     super.dispose();
   }
@@ -163,6 +188,8 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     if (_connected) {
       await _disconnect();
     } else {
+      // При ручном подключении через UI используем legacy подход
+      // чтобы сохранить контроль над состоянием UI
       await _connect();
     }
   }
