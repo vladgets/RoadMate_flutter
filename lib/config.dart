@@ -264,7 +264,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "call_phone",
-      "description": "Place a phone call. Resolve phone number from long-term memory.",
+      "description": "Place a phone call. Try to resolve a phone number fetching from memory.",
       "parameters": {
         "type": "object",
         "properties": {

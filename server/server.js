@@ -1,11 +1,22 @@
 import express from "express";
 import { registerGmailRoutes } from "./gmail.js";
 import { registerGoogleMapsRoutes } from "./google_maps.js";
+import { registerUserLocationRoutes } from "./user_location.js";
+import admin from "firebase-admin";
 
 const app = express();
 app.use(express.json());
+
+// Initialize Firebase Admin once for the whole server (used by user_location routes)
+if (!admin.apps?.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+  });
+}
+
 registerGmailRoutes(app);
 registerGoogleMapsRoutes(app);
+registerUserLocationRoutes(app);
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
@@ -66,7 +77,7 @@ app.post("/websearch", async (req, res) => {
     const data = await r.json();
 
     if (!r.ok) {
-      return res.status(r.status).json({ ok: false, error: data?.error?.message || "OpenAI error", ...(INCLUDE_RAW ? { raw: data } : {}) });
+      return res.status(r.status).json({ ok: false, error: data?.error?.message || "OpenAI error" });
     }
 
     // Extract the assistant's answer text.
