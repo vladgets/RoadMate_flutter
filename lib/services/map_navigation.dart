@@ -99,6 +99,7 @@ Future<Map<String, dynamic>> handleOpenMapsRouteToolCall(Map<String, dynamic> ar
   final encodedDest = Uri.encodeComponent(destination);
 
   Uri launchUri;
+  bool delayedLaunch = false;
 
   if (Platform.isAndroid) {
     // 🔹 Android: system navigation intent (default app)
@@ -110,6 +111,9 @@ Future<Map<String, dynamic>> handleOpenMapsRouteToolCall(Map<String, dynamic> ar
       "google.navigation:q=$encodedDest&mode=$mode",
     );
   } else if (Platform.isIOS) {
+    // make delayed launch of the Nav app so that Assistant can first speak its response
+    delayedLaunch = true; 
+
     // iOS: Apple Maps / Google Maps / Waze handoff via URL schemes or universal links.
     final isWalking = routeType == "on_foot";
 
@@ -130,16 +134,28 @@ Future<Map<String, dynamic>> handleOpenMapsRouteToolCall(Map<String, dynamic> ar
       launchUri = Uri.parse("http://maps.apple.com/?daddr=$encodedDest&dirflg=$dirFlag");
     }
   } else {
-    return {"ok": false, "error": "Unsupported platform"};
+      return {"ok": false, "error": "Unsupported platform"};
   }
 
-  final opened = await launchUrl(
-    launchUri,
-    mode: LaunchMode.externalApplication,
-  );
+  if (delayedLaunch) {
+    // iOS: return immediately so the assistant can start TTS, then launch Maps shortly after.
+    Future.delayed(const Duration(seconds: 5), () async {
+      await launchUrl(
+        launchUri,
+        mode: LaunchMode.externalApplication,
+      );
+    });
+  }
+  else {
+    // Android: launch immediately
+    final opened = await launchUrl(
+      launchUri,
+      mode: LaunchMode.externalApplication,
+    );
 
-  if (!opened) {
-    return {"ok": false, "error": "Could not open navigation app"};
+    if (!opened) {
+      return {"ok": false, "error": "Could not open navigation app"};
+    }
   }
 
   return {

@@ -1,6 +1,8 @@
 import 'services/extra_tools.dart';
 import 'services/memory_store.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math';
+import 'dart:convert';
 
 class Config {
   static const String systemPromptTemplate = '''
@@ -14,7 +16,7 @@ Language: mirror user; default English (US). If user switches languages, follow 
 Turns: keep responses under ~5s; stop speaking immediately on user audio (barge-in).
 
 Tools: call a function whenever it can answer faster or more accurately than guessing; summarize tool output briefly.
-If a tool call requires parameters try to infer from the context or fetch from memory using memory_fetch tool first before asking user for more info.
+If a tool call requires parameters you must first infer from context and/or call 'memory_fetch' before asking the user.
 
 Memory: You can save facts to long-term memory with "memory_append" when user ask to remember things. 
 If user asks refer to personal information check your memory using "memory_fetch" tool.
@@ -30,12 +32,43 @@ Current date: {{CURRENT_DATE_READABLE}}
 ''';
 
   static const String model = "gpt-realtime-mini-2025-12-15";
-  static const String voice = "marin";
+
+  static const String maleVoice = "echo"; // default male voice
+  static const String femaleVoice = "marin"; // default female voice 
+  static const List<String> supportedVoices = [femaleVoice, maleVoice];
+  static bool get isMaleVoice => voice == maleVoice;
+  static bool get isFemaleVoice => voice == femaleVoice;
+  static String voice = femaleVoice;
 
   // Our server URL and preference keys
   static const serverUrl = "https://roadmate-flutter.onrender.com";
   static const prefKeyClientId = 'roadmate_client_id';
+  static const prefKeyVoice = 'roadmate_voice';
 
+  /// Read saved voice from SharedPreferences (call during app startup).
+  static Future<void> loadSavedVoice() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(prefKeyVoice);
+      if (saved != null && supportedVoices.contains(saved)) {
+        voice = saved;
+      }
+    } catch (_) {
+      // Keep default voice if prefs are unavailable.
+    }
+  }
+
+  /// Persist and update current voice selection.
+  static Future<void> setVoice(String newVoice) async {
+    if (!supportedVoices.contains(newVoice)) return;
+    voice = newVoice;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(prefKeyVoice, newVoice);
+    } catch (_) {
+      // Ignore persistence errors; voice stays updated for this session.
+    }
+  }
 
   /// Build the system prompt with the current readable date
   static String buildSystemPrompt() {
@@ -348,4 +381,22 @@ $trimmedPrefs''';
       }
     },
   ];
+}
+
+/// Persistent per-install client id used for server-side token partitioning (Gmail, etc.).
+/// No extra deps: uses Random.secure + base64url.
+class ClientIdStore {
+  static Future<String> getOrCreate() async {
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getString(Config.prefKeyClientId);
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    // 16 bytes -> 22 chars base64url without padding (roughly)
+    final rnd = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rnd.nextInt(256));
+    final cid = base64UrlEncode(bytes).replaceAll('=', '');
+
+    await prefs.setString(Config.prefKeyClientId, cid);
+    return cid;
+  }
 }
