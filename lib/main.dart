@@ -1,22 +1,31 @@
 import 'dart:convert';
 import 'dart:async';
+import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'config.dart';
 import 'ui/main_settings_menu.dart';
-import 'services/extra_tools.dart';
+import 'services/geo_time_tools.dart';
 import 'services/memory_store.dart';
 import 'services/calendar_store.dart';
 import 'services/web_search.dart';
 import 'services/gmail_client.dart';
 import 'services/map_navigation.dart';
 import 'services/phone_call.dart';
+import 'firebase_messaging.dart';
+
 
 /// Main entry point (keets app in portrait mode only)
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Firebase init for push messaging (disable for now)
+  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
   // some initial setup  
   await Config.loadSavedVoice();
@@ -76,6 +85,9 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
       debugPrint('[ClientId] $cid');
       if (mounted) setState(() {});
     });
+
+     // disable for now
+     // initFcm();
   }
 
   bool _connecting = false;
