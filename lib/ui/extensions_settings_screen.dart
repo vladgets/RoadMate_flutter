@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../services/calendar_store.dart';
+import '../services/calendar.dart';
 import '../services/gmail_client.dart';
 import '../config.dart';
 

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
-import '../ui/memory_settings_screen.dart';
-import '../ui/extensions_settings_screen.dart';
+import 'memory_settings_screen.dart';
+import 'extensions_settings_screen.dart';
+import 'reminders_screen.dart';
+import '../services/reminders.dart';
 
 
 class SettingsScreen extends StatefulWidget {
@@ -100,6 +102,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
+          // Reminders (view upcoming reminders)
+          ListTile(
+            leading: const Icon(Icons.notifications_active_outlined),
+            title: const Text('Reminders'),
+            subtitle: const Text('View upcoming reminders'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              // Reminders
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const RemindersScreen()),
+              );
+            },
+          ),
+          const Divider(),
           ListTile(
             leading: const Icon(Icons.extension),
             title: const Text('Extensions'),
@@ -118,7 +134,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('Open WhatsApp with a prefilled message'),
             trailing: const Icon(Icons.open_in_new),
             onTap: () async {
-              await testWhatsApp();
+              // сawait testWhatsApp();
+              // await openSpotifyUrl('https://open.spotify.com/episode/2pCc9DRjOeZFn8UVY9X6p7');
+              // await openSpotifySearchDeep('Inworld podcast');
+              await RemindersService.instance.scheduleReminderInOneMinute('This is a test reminder from RoadMate app');
+              // await RemindersService.instance.sendTestNotificationNow(message: 'This is a test notification from RoadMate app');
               // ignore: use_build_context_synchronously
               Navigator.of(context).maybePop();
             },
@@ -161,3 +181,16 @@ Future<void> testWhatsApp() async {
   }
 }
 
+Future<void> openSpotifyUrl(String url) async {
+  final uri = Uri.parse(url);
+  if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    throw Exception('Could not open $url');
+  }
+}
+
+Future<void> openSpotifySearchDeep(String query) async {
+  final encoded = Uri.encodeComponent(query);
+  final uri = Uri.parse('spotify:search:$encoded');
+
+  await launchUrl(uri, mode: LaunchMode.externalApplication);
+}

@@ -9,10 +9,7 @@ class Config {
 You are a realtime voice AI assistant helping users on the go.
 
 Personality: warm, witty, quick-talking; conversationally human. 
-Grammatical gender: feminine.
-
 Language: mirror user; default English (US). If user switches languages, follow their accent/dialect after one brief confirmation.
-
 Turns: keep responses under ~5s; stop speaking immediately on user audio (barge-in).
 
 Tools: call a function whenever it can answer faster or more accurately than guessing; summarize tool output briefly.
@@ -24,6 +21,8 @@ If user asks refer to personal information check your memory using "memory_fetch
 WebSearch: Use WebSearch tool for up-to-date or verifiable real-world facts; otherwise answer from knowledge, and never invent facts beyond search results.
 
 Email: When user asks about their emails, use the Gmail search tool to find relevant emails. Use all the search terms in English.
+
+Reminders: Use Reminders tools to create, list, and cancel reminders as requested by the user.
 
 ETA and Navigation: When user asks ETA for a given destination if you can't resolve it to unique address try to check with memory_fetch tool if such address exists in memory
 and only if not then ask user.
@@ -279,7 +278,51 @@ $trimmedPrefs''';
         },
         "required": ["contact_name", "phone_number"],
       },
-    }
+    },
+    // ---------------- Reminders tools ----------------
+    {
+      "type": "function",
+      "name": "reminder_create",
+      "description": "Create a local reminder that triggers a notification at a specific time.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "What to remind the user about."
+          },
+          "when_iso": {
+            "type": "string",
+            "description": "Local date/time in ISO 8601 format, e.g. 2026-01-28T18:30:00"
+          }
+        },
+        "required": ["text", "when_iso"]
+      },
+    },
+    {
+      "type": "function",
+      "name": "reminder_list",
+      "description": "List all upcoming reminders.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+    },
+    {
+      "type": "function",
+      "name": "reminder_cancel",
+      "description": "Cancel a previously created reminder by id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Reminder id returned when the reminder was created."
+          }
+        },
+        "required": ["id"]
+      },
+    },    
   ];
 
 

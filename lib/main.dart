@@ -1,22 +1,23 @@
 import 'dart:convert';
 import 'dart:async';
-import 'firebase_options.dart';
+// import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+// import 'package:firebase_core/firebase_core.dart';
+// import 'package:firebase_messaging/firebase_messaging.dart';
 import 'config.dart';
 import 'ui/main_settings_menu.dart';
 import 'services/geo_time_tools.dart';
 import 'services/memory_store.dart';
-import 'services/calendar_store.dart';
+import 'services/calendar.dart';
 import 'services/web_search.dart';
 import 'services/gmail_client.dart';
 import 'services/map_navigation.dart';
 import 'services/phone_call.dart';
-import 'firebase_messaging.dart';
+import 'services/reminders.dart';
+// import 'firebase_messaging.dart';
 
 
 /// Main entry point (keets app in portrait mode only)
@@ -29,6 +30,10 @@ Future<void> main() async {
 
   // some initial setup  
   await Config.loadSavedVoice();
+
+  // Initialize reminders service
+  await RemindersService.instance.init();
+
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
@@ -59,7 +64,7 @@ class VoiceButtonPage extends StatefulWidget {
 // final String tokenServerUrl = "http://10.0.2.2:3000/token";
 const tokenServerUrl = '${Config.serverUrl}/token';
 
-class _VoiceButtonPageState extends State<VoiceButtonPage> {
+class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingObserver {  
   RTCPeerConnection? _pc;
   RTCDataChannel? _dc;
   MediaStream? _mic;
@@ -78,6 +83,8 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     // Ensure we have a stable client id for Gmail token storage on the server.
     ClientIdStore.getOrCreate().then((cid) {
       _clientId = cid;
@@ -88,6 +95,14 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
 
      // disable for now
      // initFcm();
+
+    // Auto-start microphone session on app launch.
+    // This will trigger the mic permission prompt (if not granted yet).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_connected || _connecting) return;
+      _connect();
+    });
   }
 
   bool _connecting = false;
@@ -99,7 +114,18 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   void dispose() {
     _webSearchClient.close();
     _disconnect();
+    WidgetsBinding.instance.removeObserver(this);    
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When app returns to foreground, auto-start mic session if not connected.
+    if (state == AppLifecycleState.resumed) {
+      if (!mounted) return;
+      if (_connected || _connecting) return;
+      _connect();
+    }
   }
 
   Future<void> _toggle() async {
@@ -112,6 +138,8 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   }
 
   Future<void> _connect() async {
+    if (_connecting || _connected) return;
+
     setState(() {
       _connecting = true;
       _error = null;
@@ -392,6 +420,16 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> {
   // phone call tool
   'call_phone': (args) async {
     return await handlePhoneCallTool(args);
+  },
+  // Reminders tools (local notifications)
+  'reminder_create': (args) async {
+    return await RemindersService.instance.toolCreate(args);
+  },
+  'reminder_list': (_) async {
+    return await RemindersService.instance.toolList();
+  },
+  'reminder_cancel': (args) async {
+    return await RemindersService.instance.toolCancel(args);
   },
 };
 

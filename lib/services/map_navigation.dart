@@ -122,7 +122,7 @@ Future<Map<String, dynamic>> handleOpenMapsRouteToolCall(Map<String, dynamic> ar
       // directionsmode: driving | walking | bicycling | transit
       final mode = isWalking ? "walking" : "driving";
       launchUri = Uri.parse(
-        "comgooglemaps://?daddr=$encodedDest&directionsmode=$mode",
+        "com.googlemaps://?daddr=$encodedDest&directionsmode=$mode",
       );
       // If Google Maps isn't installed, we'll fall back later.
     } else if (navApp == "waze") {
@@ -138,8 +138,9 @@ Future<Map<String, dynamic>> handleOpenMapsRouteToolCall(Map<String, dynamic> ar
   }
 
   if (delayedLaunch) {
+    const int delayTime = 7; // seconds
     // iOS: return immediately so the assistant can start TTS, then launch Maps shortly after.
-    Future.delayed(const Duration(seconds: 5), () async {
+    Future.delayed(const Duration(seconds: delayTime), () async {
       await launchUrl(
         launchUri,
         mode: LaunchMode.externalApplication,
