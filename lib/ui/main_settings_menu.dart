@@ -5,8 +5,8 @@ import '../config.dart';
 import 'memory_settings_screen.dart';
 import 'extensions_settings_screen.dart';
 import 'reminders_screen.dart';
+import 'youtube_history_screen.dart';
 // import '../services/reminders.dart';
-import '../services/youtube.dart';
 
 
 class SettingsScreen extends StatefulWidget {
@@ -125,6 +125,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
+          ListTile(
+            leading: const Icon(Icons.video_library),
+            title: const Text('YouTube history'),
+            subtitle: const Text('Videos from subscriptions (last month)'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const YouTubeHistoryScreen()),
+              );
+            },
+          ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.extension),
@@ -149,9 +160,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               // await openSpotifySearchDeep('Inworld podcast');
               // await RemindersService.instance.scheduleReminderInOneMinute('This is a test reminder from RoadMate app');
               // final text = await getYoutubeTranscriptText("https://www.youtube.com/watch?v=3hptKYix4X8");
-
-              final messenger = ScaffoldMessenger.of(context);
-              final navigator = Navigator.of(context);
 
               // final url = "https://www.youtube.com/watch?v=3hptKYix4X8";
               const testUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";

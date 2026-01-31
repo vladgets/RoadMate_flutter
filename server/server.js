@@ -2,6 +2,7 @@ import express from "express";
 import { registerGmailRoutes } from "./gmail.js";
 import { registerGoogleMapsRoutes } from "./google_maps.js";
 import { registerUserLocationRoutes } from "./user_location.js";
+import { registerYouTubeRoutes } from "./youtube.js";
 import admin from "firebase-admin";
 
 const app = express();
@@ -17,6 +18,7 @@ if (!admin.apps?.length) {
 registerGmailRoutes(app);
 registerGoogleMapsRoutes(app);
 registerUserLocationRoutes(app);
+registerYouTubeRoutes(app);
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
