@@ -17,6 +17,7 @@ import 'services/gmail_client.dart';
 import 'services/map_navigation.dart';
 import 'services/phone_call.dart';
 import 'services/reminders.dart';
+import 'services/youtube_client.dart';
 // import 'firebase_messaging.dart';
 
 
@@ -76,6 +77,8 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   // Gmail client (multi-user): initialized with per-install client id.
   late final GmailClient gmailClient;
   String? _clientId;
+  // YouTube client
+  late final YouTubeClient youtubeClient;
 
   // Deduplicate tool calls (Realtime may emit in_progress + completed, and can resend events).
   final Set<String> _handledToolCallIds = <String>{};
@@ -89,6 +92,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     ClientIdStore.getOrCreate().then((cid) {
       _clientId = cid;
       gmailClient = GmailClient(baseUrl: Config.serverUrl, clientId: cid);
+      youtubeClient = YouTubeClient(baseUrl: Config.serverUrl, clientId: cid);
       debugPrint('[ClientId] $cid');
       if (mounted) setState(() {});
     });
@@ -431,6 +435,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   'reminder_cancel': (args) async {
     return await RemindersService.instance.toolCancel(args);
   },
+  // YouTube subscriptions feed tool
+  'youtube_subscriptions_feed': (_) async {
+    return await youtubeClient.getSubscriptionsFeedTool();
+  }
 };
 
   /// Extracts tool name + arguments from an event, runs the handler,

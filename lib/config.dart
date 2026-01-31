@@ -1,8 +1,9 @@
-import 'services/geo_time_tools.dart';
-import 'services/memory_store.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'services/geo_time_tools.dart';
+import 'services/memory_store.dart';
+
 
 class Config {
   static const String systemPromptTemplate = '''
@@ -323,6 +324,16 @@ $trimmedPrefs''';
         "required": ["id"]
       },
     },    
+    /// YouTube subscriptions feed tool
+    {
+      "type": "function",
+      "name": "youtube_subscriptions_feed",
+      "description": "Get the latest recommended videos from the user's YouTube subscriptions feed.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+      }
+    }
   ];
 
 

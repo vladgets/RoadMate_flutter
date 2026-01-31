@@ -32,12 +32,10 @@ class YouTubeSubscriptionVideo {
 class YouTubeClient {
   final String baseUrl;
   final String? clientId;
-  final Future<String?> Function()? getClientId;
 
   const YouTubeClient({
     required this.baseUrl,
-    this.clientId,
-    this.getClientId,
+    required this.clientId,
   });
 
   Uri _u(String path) => Uri.parse('$baseUrl$path');
@@ -46,9 +44,8 @@ class YouTubeClient {
     final h = <String, String>{
       'Content-Type': 'application/json',
     };
-    final cid = clientId ?? (getClientId != null ? await getClientId!() : null);
-    if (cid != null && cid.isNotEmpty) {
-      h['X-Client-Id'] = cid;
+    if (clientId != null && clientId!.isNotEmpty) {
+      h['X-Client-Id'] = clientId!;
     }
     return h;
   }
@@ -69,4 +66,24 @@ class YouTubeClient {
     final list = (data['videos'] as List? ?? []).whereType<Map>().toList();
     return list.map((m) => YouTubeSubscriptionVideo.fromJson(m.cast<String, dynamic>())).toList();
   }
+
+  /// Tool wrapper for LLM/tool-calling usage.
+  /// Returns plain JSON so it can be safely serialized over MCP/agent tools.
+  Future<Map<String, dynamic>> getSubscriptionsFeedTool() async {
+    final videos = await getSubscriptionsFeed();
+
+    return {
+      'videos': videos
+          .map((v) => {
+                'videoId': v.videoId,
+                'title': v.title,
+                'url': v.url,
+                'publishedAt': v.publishedAt.toIso8601String(),
+              })
+          .toList(),
+    };
+  }
 }
+
+
+
