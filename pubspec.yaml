@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_webrtc: ^1.2.0
+  livekit_client: ^2.3.0  # For VocalBridge integration
   http: ^1.2.2
   http_parser: ^4.0.2
   geolocator: ^14.0.0
