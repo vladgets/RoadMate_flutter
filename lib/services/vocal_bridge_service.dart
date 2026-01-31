@@ -204,6 +204,11 @@ class VocalBridgeService {
 
   /// Execute a client action and send result back
   Future<void> _executeAction(String action, Map<String, dynamic> payload, String actionId) async {
+    debugPrint('[VocalBridge] ========== EXECUTING ACTION ==========');
+    debugPrint('[VocalBridge] Action: $action');
+    debugPrint('[VocalBridge] Payload: $payload');
+    debugPrint('[VocalBridge] ActionId: $actionId');
+
     final handler = _toolHandlers[action];
 
     if (handler == null) {
@@ -213,28 +218,42 @@ class VocalBridgeService {
     }
 
     try {
+      debugPrint('[VocalBridge] Calling handler for: $action');
       final result = await handler(payload);
+      debugPrint('[VocalBridge] Handler result: $result');
       await _sendActionResult(action, actionId, result);
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('[VocalBridge] Action error ($action): $e');
+      debugPrint('[VocalBridge] Stack trace: $stack');
       await _sendActionResult(action, actionId, {'error': e.toString()});
     }
   }
 
-  /// Send action result back to agent
+  /// Send action result back to agent (App to Agent)
   Future<void> _sendActionResult(String action, String actionId, Map<String, dynamic> result) async {
+    debugPrint('[VocalBridge] ========== SENDING RESULT ==========');
+    debugPrint('[VocalBridge] Action: $action');
+    debugPrint('[VocalBridge] ActionId: $actionId');
+    debugPrint('[VocalBridge] Result: $result');
+
     final room = _room;
-    if (room == null || room.connectionState != ConnectionState.connected) {
-      debugPrint('[VocalBridge] Cannot send result - not connected');
+    if (room == null) {
+      debugPrint('[VocalBridge] ERROR: Room is null!');
+      return;
+    }
+    if (room.connectionState != ConnectionState.connected) {
+      debugPrint('[VocalBridge] ERROR: Room not connected! State: ${room.connectionState}');
       return;
     }
 
+    // Use the App to Agent format from VocalBridge docs
     final message = jsonEncode({
-      'type': 'action_result',
+      'type': 'client_action',
       'action': action,
-      'id': actionId,
-      'result': result,
+      'payload': result,
     });
+
+    debugPrint('[VocalBridge] Message to send: $message');
 
     try {
       await room.localParticipant?.publishData(
@@ -242,9 +261,10 @@ class VocalBridgeService {
         reliable: true,
         topic: 'client_actions',
       );
-      debugPrint('[VocalBridge] Sent result for action: $action');
-    } catch (e) {
-      debugPrint('[VocalBridge] Error sending result: $e');
+      debugPrint('[VocalBridge] SUCCESS: Result sent for action: $action');
+    } catch (e, stack) {
+      debugPrint('[VocalBridge] ERROR sending result: $e');
+      debugPrint('[VocalBridge] Stack: $stack');
     }
   }
 
