@@ -6,6 +6,11 @@
 # - Legacy Build System (ios/Runner.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings)
 # - Short symlink path (~/p)
 # - Optional: Xcode → File → Workspace Settings → Custom Derived Data → /tmp/xc-dd
+#
+# To build from Xcode:
+#   1. Run: ./ios/build_from_short_path.sh  (once, to prepare)
+#   2. Open: open ~/p/ios/Runner.xcworkspace
+#   3. In Xcode: Product → Build (⌘B)
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SHORT_PATH="$HOME/p"

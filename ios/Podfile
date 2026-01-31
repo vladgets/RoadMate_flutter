@@ -94,42 +94,10 @@ post_install do |installer|
     File.symlink('Classes', wm_link)
   end
 
-  # Consolidated plugin include dir: one path instead of 17 (reduces "Argument list too long")
+  # Write plugin header paths to xcconfig (project.pbxproj uses $(inherited) to avoid duplication)
   flutter_dir = File.join(pods_root, 'Flutter')
-  plugin_include = File.join(flutter_dir, 'PluginInclude')
-  FileUtils.mkdir_p(plugin_include)
-
-  plugin_paths = [
-    ['battery_plus', 'battery_plus/ios/battery_plus/Sources/battery_plus/include'],
-    ['device_calendar', 'device_calendar/ios'],
-    ['flutter_activity_recognition', 'flutter_activity_recognition/ios'],
-    ['flutter_background_service_ios', 'flutter_background_service_ios/ios'],
-    ['flutter_callkit_incoming', 'flutter_callkit_incoming/ios'],
-    ['flutter_local_notifications', 'flutter_local_notifications/ios'],
-    ['flutter_webrtc', 'flutter_webrtc/ios'],
-    ['geocoding_ios', 'geocoding_ios/ios'],
-    ['geolocator_apple', 'geolocator_apple/darwin'],
-    ['package_info_plus', 'package_info_plus/ios'],
-    ['path_provider_foundation', 'path_provider_foundation/darwin'],
-    ['shared_preferences_foundation', 'shared_preferences_foundation/darwin'],
-    ['sqflite_darwin', 'sqflite_darwin/darwin'],
-    ['url_launcher_ios', 'url_launcher_ios/ios'],
-    ['wakelock_plus', 'wakelock_plus/ios'],
-    ['workmanager', 'workmanager/ios'],
-  ]
-
-  plugin_paths.each do |name, rel_path|
-    src = File.join(symlinks, rel_path)
-    dst = File.join(plugin_include, name)
-    if File.directory?(src) && !File.exist?(dst)
-      # Relative symlink so it works from any project location
-      rel_src = Pathname.new(src).relative_path_from(Pathname.new(plugin_include)).to_s
-      File.symlink(rel_src, dst)
-    end
-  end
-
   plugin_headers = <<~XCCONFIG
-    HEADER_SEARCH_PATHS = $(inherited) $(SRCROOT)/Flutter/PluginInclude
+    HEADER_SEARCH_PATHS = $(inherited) $(PODS_ROOT)/../.symlinks/plugins/battery_plus/ios/battery_plus/Sources/battery_plus/include $(PODS_ROOT)/../.symlinks/plugins/device_calendar/ios $(PODS_ROOT)/../.symlinks/plugins/flutter_activity_recognition/ios $(PODS_ROOT)/../.symlinks/plugins/flutter_background_service_ios/ios $(PODS_ROOT)/../.symlinks/plugins/flutter_callkit_incoming/ios $(PODS_ROOT)/../.symlinks/plugins/flutter_local_notifications/ios $(PODS_ROOT)/../.symlinks/plugins/flutter_webrtc/ios $(PODS_ROOT)/../.symlinks/plugins/geocoding_ios/ios $(PODS_ROOT)/../.symlinks/plugins/geolocator_apple/darwin $(PODS_ROOT)/../.symlinks/plugins/package_info_plus/ios $(PODS_ROOT)/../.symlinks/plugins/path_provider_foundation/darwin $(PODS_ROOT)/../.symlinks/plugins/shared_preferences_foundation/darwin $(PODS_ROOT)/../.symlinks/plugins/sqflite_darwin/darwin $(PODS_ROOT)/../.symlinks/plugins/url_launcher_ios/ios $(PODS_ROOT)/../.symlinks/plugins/wakelock_plus/ios $(PODS_ROOT)/../.symlinks/plugins/workmanager/ios
     FRAMEWORK_SEARCH_PATHS = $(inherited) $(PODS_ROOT)/WebRTC-SDK/WebRTC.xcframework/ios-arm64 $(PODS_ROOT)/WebRTC-SDK/WebRTC.xcframework/ios-arm64_x86_64-simulator
   XCCONFIG
   File.write(File.join(flutter_dir, 'PluginHeaders.xcconfig'), plugin_headers)
