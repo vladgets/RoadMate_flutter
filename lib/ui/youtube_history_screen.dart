@@ -117,7 +117,7 @@ class _YouTubeHistoryScreenState extends State<YouTubeHistoryScreen> {
                     )
                   : ListView.separated(
                       itemCount: _videos.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final v = _videos[index];
                         final dateStr = _formatDate(context, v.publishedAt);

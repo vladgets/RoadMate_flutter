@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:youtube_transcript_api/youtube_transcript_api.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 final _api = YouTubeTranscriptApi();
 
@@ -111,21 +112,7 @@ Future<Uri?> playYoutubeAudioFull(
     if (streamInfo == null) return null;
 
     final uri = streamInfo.url;
-    debugPrint('YT stream url: $uri');
-    debugPrint('scheme=${uri.scheme} host=${uri.host}');
-
-    final headers = <String, String>{
-      // UA that matches the ANDROID client family
-      'User-Agent': 'com.google.android.youtube/19.04.37 (Linux; U; Android 14) gzip',
-      'Accept': '*/*',
-      'Accept-Language': 'en-US,en;q=0.9',
-
-      // These sometimes help, sometimes don’t; safe to keep:
-      'Referer': 'https://www.youtube.com/watch?v=$id',
-      'Origin': 'https://www.youtube.com',
-    };
-
-    await player.setAudioSource(AudioSource.uri(uri, headers: headers));
+    await player.setAudioSource(AudioSource.uri(uri));
 
     // await player.setUrl(uri.toString());
     await player.seek(initialPosition ?? Duration.zero);
@@ -180,5 +167,30 @@ Future<VoidCallback?> playYoutubeAudioSegment(
     };
   } catch (_) {
     return null;
+  }
+}
+
+
+/// Opens the YouTube app (if installed) or web browser to play the given video.
+Future<void> openYoutubeVideo(
+  String videoId, {
+  int? startSeconds,
+  bool autoplay = true,
+}) async {
+  final start = startSeconds ?? 0;
+  final auto = autoplay ? 1 : 0;
+
+  final appUri = Uri.parse(
+    'youtube://watch?v=$videoId&t=${start}s&autoplay=$auto',
+  );
+
+  final webUri = Uri.parse(
+    'https://www.youtube.com/watch?v=$videoId&t=${start}s&autoplay=$auto',
+  );
+
+  if (await canLaunchUrl(appUri)) {
+    await launchUrl(appUri);
+  } else {
+    await launchUrl(webUri, mode: LaunchMode.externalApplication);
   }
 }

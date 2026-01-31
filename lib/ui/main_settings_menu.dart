@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:just_audio/just_audio.dart';
 import '../config.dart';
 import 'memory_settings_screen.dart';
 import 'extensions_settings_screen.dart';
 import 'reminders_screen.dart';
 import 'youtube_history_screen.dart';
+import '../services/youtube.dart';
 // import '../services/reminders.dart';
 
 
@@ -17,11 +17,9 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final AudioPlayer _testAudioPlayer = AudioPlayer();
 
   @override
   void dispose() {
-    _testAudioPlayer.dispose();
     super.dispose();
   }
 
@@ -160,39 +158,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               // await openSpotifySearchDeep('Inworld podcast');
               // await RemindersService.instance.scheduleReminderInOneMinute('This is a test reminder from RoadMate app');
               // final text = await getYoutubeTranscriptText("https://www.youtube.com/watch?v=3hptKYix4X8");
+              await openYoutubeVideo("3hptKYix4X8", startSeconds: 0, autoplay: true);
 
-              // final url = "https://www.youtube.com/watch?v=3hptKYix4X8";
-              const testUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
-
-              await _testAudioPlayer.setUrl(testUrl);
-              await _testAudioPlayer.play();
-
-              // final uri = await playYoutubeAudioFull(
-              //   _testAudioPlayer,
-              //   url,
-              //   preferLowBandwidth: true,
-              // );
-
-              // if (!mounted) return;
-
-              // if (uri == null) {
-              //   messenger.showSnackBar(
-              //     const SnackBar(
-              //       content: Text('Could not start audio (no stream / blocked / no connection).'),
-              //       duration: Duration(seconds: 2),
-              //     ),
-              //   );
-              //   return;
-              // }
-
-              // messenger.showSnackBar(
-              // const SnackBar(
-              //   content: Text('Playing YouTube audio-only stream…'),
-              //   duration: Duration(seconds: 2),
-              // ),
-              //);
-
-              // navigator.maybePop();
             },
           ),
         ],
