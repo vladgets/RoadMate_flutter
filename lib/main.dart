@@ -119,6 +119,12 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     TrackingManager.instance.initialize();
     // Инициализируем фоновый сервис для работы при заблокированном экране
     BackgroundTrackingService.instance.initialize();
+    // Трекинг включён по умолчанию — автозапуск при старте
+    TrackingManager.instance.isEnabledByDefault().then((enabled) async {
+      if (enabled) {
+        await TrackingManager.instance.start();
+      }
+    });
     
     // Настраиваем RealtimeConnectionService для обработки событий
     RealtimeConnectionService.instance.registerEventHandler(handleOaiEvent);

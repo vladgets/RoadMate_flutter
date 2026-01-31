@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'core/activity_provider.dart';
 import 'core/location_provider.dart';
 import 'core/state_machine.dart';
@@ -15,6 +16,7 @@ import 'models/location_fix.dart';
 
 /// Менеджер для управления сервисом трекинга
 class TrackingManager {
+  static const String _prefKeyTrackingEnabled = 'tracking_enabled';
   static TrackingManager? _instance;
   static TrackingManager get instance {
     _instance ??= TrackingManager._();
@@ -100,6 +102,18 @@ class TrackingManager {
   
   /// Проверяет, работает ли трекинг
   bool get isRunning => _service?.isRunning ?? false;
+  
+  /// Проверяет, включён ли трекинг по умолчанию (для автозапуска при старте приложения)
+  Future<bool> isEnabledByDefault() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_prefKeyTrackingEnabled) ?? true;
+  }
+  
+  /// Сохранить настройку «трекинг включён по умолчанию»
+  Future<void> setEnabledByDefault(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefKeyTrackingEnabled, enabled);
+  }
   
   /// Получить базу данных
   TrackingDatabase? get database => _database;

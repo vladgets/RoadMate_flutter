@@ -40,4 +40,110 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
   end
+
+  # Fix "Module not found" for plugins - add source header paths so __has_include can find them
+  pods_root = File.dirname(installer.sandbox.root)
+  symlinks = File.join(pods_root, '.symlinks', 'plugins')
+
+  # device_calendar: Classes/ has headers but __has_include expects device_calendar/ subdir
+  device_calendar_ios = File.join(symlinks, 'device_calendar', 'ios')
+  device_calendar_link = File.join(device_calendar_ios, 'device_calendar')
+  if File.directory?(device_calendar_ios) && !File.exist?(device_calendar_link)
+    File.symlink('Classes', device_calendar_link)
+  end
+
+  # flutter_activity_recognition: same structure
+  far_ios = File.join(symlinks, 'flutter_activity_recognition', 'ios')
+  far_link = File.join(far_ios, 'flutter_activity_recognition')
+  if File.directory?(far_ios) && !File.exist?(far_link)
+    File.symlink('Classes', far_link)
+  end
+
+  # flutter_background_service_ios: same structure
+  fbs_ios = File.join(symlinks, 'flutter_background_service_ios', 'ios')
+  fbs_link = File.join(fbs_ios, 'flutter_background_service_ios')
+  if File.directory?(fbs_ios) && !File.exist?(fbs_link)
+    File.symlink('Classes', fbs_link)
+  end
+
+  # flutter_callkit_incoming: same structure
+  fci_ios = File.join(symlinks, 'flutter_callkit_incoming', 'ios')
+  fci_link = File.join(fci_ios, 'flutter_callkit_incoming')
+  if File.directory?(fci_ios) && !File.exist?(fci_link)
+    File.symlink('Classes', fci_link)
+  end
+
+  # flutter_local_notifications: same structure
+  fln_ios = File.join(symlinks, 'flutter_local_notifications', 'ios')
+  fln_link = File.join(fln_ios, 'flutter_local_notifications')
+  if File.directory?(fln_ios) && !File.exist?(fln_link)
+    File.symlink('Classes', fln_link)
+  end
+
+  # flutter_webrtc: Classes/ structure (needs WebRTC path in PluginHeaders.xcconfig)
+  fw_ios = File.join(symlinks, 'flutter_webrtc', 'ios')
+  fw_link = File.join(fw_ios, 'flutter_webrtc')
+  if File.directory?(fw_ios) && !File.exist?(fw_link)
+    File.symlink('Classes', fw_link)
+  end
+
+  # workmanager: Classes/ structure
+  wm_ios = File.join(symlinks, 'workmanager', 'ios')
+  wm_link = File.join(wm_ios, 'workmanager')
+  if File.directory?(wm_ios) && !File.exist?(wm_link)
+    File.symlink('Classes', wm_link)
+  end
+
+  # Consolidated plugin include dir: one path instead of 17 (reduces "Argument list too long")
+  flutter_dir = File.join(pods_root, 'Flutter')
+  plugin_include = File.join(flutter_dir, 'PluginInclude')
+  FileUtils.mkdir_p(plugin_include)
+
+  plugin_paths = [
+    ['battery_plus', 'battery_plus/ios/battery_plus/Sources/battery_plus/include'],
+    ['device_calendar', 'device_calendar/ios'],
+    ['flutter_activity_recognition', 'flutter_activity_recognition/ios'],
+    ['flutter_background_service_ios', 'flutter_background_service_ios/ios'],
+    ['flutter_callkit_incoming', 'flutter_callkit_incoming/ios'],
+    ['flutter_local_notifications', 'flutter_local_notifications/ios'],
+    ['flutter_webrtc', 'flutter_webrtc/ios'],
+    ['geocoding_ios', 'geocoding_ios/ios'],
+    ['geolocator_apple', 'geolocator_apple/darwin'],
+    ['package_info_plus', 'package_info_plus/ios'],
+    ['path_provider_foundation', 'path_provider_foundation/darwin'],
+    ['shared_preferences_foundation', 'shared_preferences_foundation/darwin'],
+    ['sqflite_darwin', 'sqflite_darwin/darwin'],
+    ['url_launcher_ios', 'url_launcher_ios/ios'],
+    ['wakelock_plus', 'wakelock_plus/ios'],
+    ['workmanager', 'workmanager/ios'],
+  ]
+
+  plugin_paths.each do |name, rel_path|
+    src = File.join(symlinks, rel_path)
+    dst = File.join(plugin_include, name)
+    if File.directory?(src) && !File.exist?(dst)
+      # Relative symlink so it works from any project location
+      rel_src = Pathname.new(src).relative_path_from(Pathname.new(plugin_include)).to_s
+      File.symlink(rel_src, dst)
+    end
+  end
+
+  plugin_headers = <<~XCCONFIG
+    HEADER_SEARCH_PATHS = $(inherited) $(SRCROOT)/Flutter/PluginInclude
+    FRAMEWORK_SEARCH_PATHS = $(inherited) $(PODS_ROOT)/WebRTC-SDK/WebRTC.xcframework/ios-arm64 $(PODS_ROOT)/WebRTC-SDK/WebRTC.xcframework/ios-arm64_x86_64-simulator
+  XCCONFIG
+  File.write(File.join(flutter_dir, 'PluginHeaders.xcconfig'), plugin_headers)
+
+  # USE_SWIFT_RESPONSE_FILE reduces ARG_MAX overflow by passing file lists via response files
+  runner_project_path = File.join(pods_root, 'Runner.xcodeproj')
+  runner_project = Xcodeproj::Project.open(runner_project_path)
+  runner_project.targets.each do |target|
+    if target.name == 'Runner'
+      target.build_configurations.each do |config|
+        config.build_settings['USE_SWIFT_RESPONSE_FILE'] = 'YES'
+      end
+      break
+    end
+  end
+  runner_project.save
 end

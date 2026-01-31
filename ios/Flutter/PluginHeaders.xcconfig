@@ -1,0 +1,2 @@
+HEADER_SEARCH_PATHS = $(inherited) $(SRCROOT)/Flutter/PluginInclude
+FRAMEWORK_SEARCH_PATHS = $(inherited) $(PODS_ROOT)/WebRTC-SDK/WebRTC.xcframework/ios-arm64 $(PODS_ROOT)/WebRTC-SDK/WebRTC.xcframework/ios-arm64_x86_64-simulator

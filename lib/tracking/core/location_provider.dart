@@ -30,6 +30,9 @@ class LocationProvider {
   static const double _activeMovementDistanceFilter = 30.0;
   static const double _stopAcquisitionDistanceFilter = 5.0;
   static const double _idleDistanceFilter = 50.0;
+  // iOS: меньший фильтр в idle для более частых пробуждений приложения в фоне
+  // (нужно для доставки обновлений CMMotionActivityManager при смене состояния)
+  static const double _idleDistanceFilterIos = 20.0;
   
   // Параметры профилей - Interval (секунды) для периодических обновлений в спящем режиме
   static const int _activeMovementIntervalSeconds = 5;
@@ -164,9 +167,15 @@ class LocationProvider {
         ),
       );
     } else if (!kIsWeb && Platform.isIOS) {
+      // На iOS в idle используем меньший distanceFilter для более частых
+      // обновлений в фоне — это пробуждает приложение и позволяет получать
+      // обновления от CMMotionActivityManager (смена still/walking/inVehicle)
+      final effectiveDistanceFilter = profile == LocationProfile.idle
+          ? _idleDistanceFilterIos.toInt()
+          : distanceFilter.toInt();
       return AppleSettings(
         accuracy: accuracy,
-        distanceFilter: distanceFilter.toInt(),
+        distanceFilter: effectiveDistanceFilter,
         // Важные настройки для iOS background location:
         activityType: ActivityType.automotiveNavigation, // Оптимально для вождения
         pauseLocationUpdatesAutomatically: false, // НЕ приостанавливать автоматически

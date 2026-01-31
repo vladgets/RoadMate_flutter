@@ -207,6 +207,9 @@ class TrackingService {
   void _handleStateChange(StateChangeEvent event) {
     _currentState = event.newState;
     
+    // ignore: avoid_print
+    print('[TrackingService] State changed: ${event.oldState} -> ${event.newState} (confidence: ${event.confidence})');
+    
     // Воспроизводим звуковой сигнал при смене состояния
     SoundManager.instance.playStateChangeSound(event.newState);
     
@@ -224,9 +227,13 @@ class TrackingService {
     );
     _eventQueue.enqueue(trackingEvent);
     
-    // Обрабатываем переход с IN_VEHICLE на STILL или WALKING
-    if (event.oldState == ActivityState.inVehicle &&
-        (event.newState == ActivityState.still || event.newState == ActivityState.walking)) {
+    // Обрабатываем переход с IN_VEHICLE на STILL или WALKING (= прибытие)
+    final isArrival = event.oldState == ActivityState.inVehicle &&
+        (event.newState == ActivityState.still || event.newState == ActivityState.walking);
+    
+    if (isArrival) {
+      // ignore: avoid_print
+      print('[TrackingService] ARRIVAL DETECTED: ${event.oldState} -> ${event.newState}');
       _handleArrival(event.timestamp);
     }
     

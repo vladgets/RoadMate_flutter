@@ -77,6 +77,9 @@ class BackgroundTrackingService {
   /// Начать фоновый трекинг
   /// Примечание: TrackingService должен быть уже запущен через TrackingManager
   Future<void> start() async {
+    // ignore: avoid_print
+    print('[BackgroundTrackingService] start() called');
+    
     if (!_isInitialized) {
       await initialize();
     }
@@ -86,15 +89,19 @@ class BackgroundTrackingService {
     try {
       if (Platform.isAndroid || Platform.isIOS) {
         await WakelockPlus.enable();
+        // ignore: avoid_print
+        print('[BackgroundTrackingService] Wakelock enabled');
       }
     } catch (e) {
       // ignore: avoid_print
-      print('Failed to enable wakelock: $e');
+      print('[BackgroundTrackingService] Failed to enable wakelock: $e');
     }
     
     // Запускаем фоновый сервис
     final service = FlutterBackgroundService();
     await service.startService();
+    // ignore: avoid_print
+    print('[BackgroundTrackingService] Background service started');
     
     // Обновляем уведомление
     await _updateNotification('Tracking active', 'Monitoring location...');
@@ -103,21 +110,31 @@ class BackgroundTrackingService {
   /// Остановить фоновый трекинг
   /// Примечание: TrackingService должен быть остановлен через TrackingManager отдельно
   Future<void> stop() async {
+    // ignore: avoid_print
+    print('[BackgroundTrackingService] stop() called');
+    
     // Отключаем wakelock
     try {
       if (Platform.isAndroid || Platform.isIOS) {
         await WakelockPlus.disable();
+        // ignore: avoid_print
+        print('[BackgroundTrackingService] Wakelock disabled');
       }
     } catch (e) {
       // ignore: avoid_print
-      print('Failed to disable wakelock: $e');
+      print('[BackgroundTrackingService] Failed to disable wakelock: $e');
     }
     
     // Останавливаем фоновый сервис
     final service = FlutterBackgroundService();
     final isRunning = await service.isRunning();
     if (isRunning) {
+      // ignore: avoid_print
+      print('[BackgroundTrackingService] Sending stop command to background service');
       service.invoke('stop');
+    } else {
+      // ignore: avoid_print
+      print('[BackgroundTrackingService] Background service was not running');
     }
     
     // Удаляем уведомление
@@ -192,6 +209,9 @@ class BackgroundTrackingService {
 /// Точка входа для фонового сервиса (Android)
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
+  // ignore: avoid_print
+  print('[BackgroundService] onStart called');
+  
   if (service is AndroidServiceInstance) {
     service.on('setAsForeground').listen((event) {
       service.setAsForegroundService();
@@ -203,55 +223,72 @@ void onStart(ServiceInstance service) async {
   }
   
   service.on('stop').listen((event) {
+    // ignore: avoid_print
+    print('[BackgroundService] Received stop command');
     service.stopSelf();
   });
   
   // Инициализируем TrackingManager в фоне (если еще не инициализирован)
   await TrackingManager.instance.initialize();
   
-  // НЕ запускаем TrackingService здесь, так как он уже должен быть запущен
-  // через TrackingManager.start() перед вызовом BackgroundTrackingService.start()
-  // Это предотвращает дублирование событий trackingStarted
+  // Запускаем трекинг если ещё не запущен
+  // (может произойти если сервис перезапустился системой)
+  if (!TrackingManager.instance.isRunning) {
+    // ignore: avoid_print
+    print('[BackgroundService] TrackingService not running, starting...');
+    await TrackingManager.instance.service?.start();
+  }
   
-  // Периодически обновляем статус
-  Timer.periodic(const Duration(seconds: 30), (timer) async {
+  // Периодически обновляем статус (каждые 60 секунд вместо 30)
+  Timer.periodic(const Duration(seconds: 60), (timer) async {
+    // ignore: avoid_print
+    print('[BackgroundService] Heartbeat tick');
+    
     if (service is AndroidServiceInstance) {
       if (await service.isForegroundService()) {
         final trackingService = TrackingManager.instance.service;
-        if (trackingService != null && trackingService.isRunning) {
+        if (trackingService != null) {
           final state = trackingService.currentState;
           final location = trackingService.lastLocation;
+          final isRunning = trackingService.isRunning;
           
           String status = 'State: ${state.name}';
           if (location != null) {
             status += '\nLat: ${location.latitude.toStringAsFixed(6)}, Lon: ${location.longitude.toStringAsFixed(6)}';
           }
+          status += '\nRunning: $isRunning';
           
           service.setForegroundNotificationInfo(
             title: 'RoadMate Tracking',
             content: status,
           );
+          
+          // ignore: avoid_print
+          print('[BackgroundService] Updated notification: $status');
         }
       }
     }
     
-    // Проверяем, нужно ли остановить сервис
-    final isTrackingRunning = TrackingManager.instance.isRunning;
-    if (!isTrackingRunning) {
-      timer.cancel();
-      service.stopSelf();
-    }
+    // НЕ останавливаем сервис автоматически!
+    // Остановка происходит только по явной команде 'stop'
+    // Это исправляет проблему самопроизвольного отключения
   });
 }
 
 /// Точка входа для фонового сервиса (iOS)
 @pragma('vm:entry-point')
 Future<bool> onIosBackground(ServiceInstance service) async {
+  // ignore: avoid_print
+  print('[BackgroundService] iOS background entry point');
+  
   await TrackingManager.instance.initialize();
   
-  // НЕ запускаем TrackingService здесь, так как он уже должен быть запущен
-  // через TrackingManager.start() перед вызовом BackgroundTrackingService.start()
-  // Это предотвращает дублирование событий trackingStarted
+  // Запускаем трекинг если ещё не запущен
+  if (!TrackingManager.instance.isRunning) {
+    // ignore: avoid_print
+    print('[BackgroundService] iOS: TrackingService not running, starting...');
+    await TrackingManager.instance.service?.start();
+  }
   
   return true;
 }

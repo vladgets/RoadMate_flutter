@@ -26,7 +26,7 @@ class TrackingSettingsScreen extends StatefulWidget {
 }
 
 class _TrackingSettingsScreenState extends State<TrackingSettingsScreen> {
-  bool _isTrackingEnabled = false;
+  bool _isTrackingEnabled = true; // По умолчанию включён
   bool _isSoundEnabled = true;
   bool _isBatteryOptimizationDisabled = true;
   bool _isRealtimeConnected = false;
@@ -248,8 +248,10 @@ class _TrackingSettingsScreenState extends State<TrackingSettingsScreen> {
     try {
       if (_isTrackingEnabled) {
         await TrackingManager.instance.start();
+        await TrackingManager.instance.setEnabledByDefault(true);
       } else {
         await TrackingManager.instance.stop();
+        await TrackingManager.instance.setEnabledByDefault(false);
       }
       widget.onTrackingToggled?.call();
       

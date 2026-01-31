@@ -36,6 +36,8 @@
 	<string>RoadMate needs continuous location access to track your movement and detect stops in the background for motion-aware tracking.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>RoadMate needs microphone access for voice conversations.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>RoadMate uses motion data to detect whether you are walking, driving, or standing still for accurate location tracking in the background.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
