@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:youtube_transcript_api/youtube_transcript_api.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
@@ -126,8 +125,7 @@ Future<Uri?> playYoutubeAudioFull(
       'Origin': 'https://www.youtube.com',
     };
 
-    // await player.setAudioSource(AudioSource.uri(uri, headers: headers));
-    await player.setAudioSource(AudioSource.uri(uri));
+    await player.setAudioSource(AudioSource.uri(uri, headers: headers));
 
     // await player.setUrl(uri.toString());
     await player.seek(initialPosition ?? Duration.zero);
