@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:just_audio/just_audio.dart';
 import '../config.dart';
 import 'memory_settings_screen.dart';
 import 'extensions_settings_screen.dart';
 import 'reminders_screen.dart';
-import '../services/reminders.dart';
+// import '../services/reminders.dart';
+import '../services/youtube.dart';
 
 
 class SettingsScreen extends StatefulWidget {
@@ -15,6 +17,14 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final AudioPlayer _testAudioPlayer = AudioPlayer();
+
+  @override
+  void dispose() {
+    _testAudioPlayer.dispose();
+    super.dispose();
+  }
+
   String _voiceLabel(String v) {
     if (v == Config.femaleVoice) return 'Female (marin)';
     if (v == Config.maleVoice) return 'Male (echo)';
@@ -129,18 +139,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.chat_bubble_outline),
-            title: const Text('Test WhatsApp'),
-            subtitle: const Text('Open WhatsApp with a prefilled message'),
+            leading: const Icon(Icons.science_outlined),
+            title: const Text('Test New Stuff'),
+            subtitle: const Text('Testing area for new features'),
             trailing: const Icon(Icons.open_in_new),
             onTap: () async {
               // сawait testWhatsApp();
               // await openSpotifyUrl('https://open.spotify.com/episode/2pCc9DRjOeZFn8UVY9X6p7');
               // await openSpotifySearchDeep('Inworld podcast');
-              await RemindersService.instance.scheduleReminderInOneMinute('This is a test reminder from RoadMate app');
-              // await RemindersService.instance.sendTestNotificationNow(message: 'This is a test notification from RoadMate app');
-              // ignore: use_build_context_synchronously
-              Navigator.of(context).maybePop();
+              // await RemindersService.instance.scheduleReminderInOneMinute('This is a test reminder from RoadMate app');
+              // final text = await getYoutubeTranscriptText("https://www.youtube.com/watch?v=3hptKYix4X8");
+
+              final messenger = ScaffoldMessenger.of(context);
+              final navigator = Navigator.of(context);
+
+              // final url = "https://www.youtube.com/watch?v=3hptKYix4X8";
+              const testUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
+
+              await _testAudioPlayer.setUrl(testUrl);
+              await _testAudioPlayer.play();
+
+              // final uri = await playYoutubeAudioFull(
+              //   _testAudioPlayer,
+              //   url,
+              //   preferLowBandwidth: true,
+              // );
+
+              // if (!mounted) return;
+
+              // if (uri == null) {
+              //   messenger.showSnackBar(
+              //     const SnackBar(
+              //       content: Text('Could not start audio (no stream / blocked / no connection).'),
+              //       duration: Duration(seconds: 2),
+              //     ),
+              //   );
+              //   return;
+              // }
+
+              // messenger.showSnackBar(
+              // const SnackBar(
+              //   content: Text('Playing YouTube audio-only stream…'),
+              //   duration: Duration(seconds: 2),
+              // ),
+              //);
+
+              // navigator.maybePop();
             },
           ),
         ],
