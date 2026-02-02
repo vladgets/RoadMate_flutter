@@ -435,10 +435,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   'reminder_cancel': (args) async {
     return await RemindersService.instance.toolCancel(args);
   },
-  // YouTube subscriptions feed tool
+  // YouTube tools
   'youtube_subscriptions_feed': (_) async {
     return await youtubeClient.getSubscriptionsFeedTool();
-  }
+  },
+  'youtube_open_video': (args) async {
+    return await openYoutubeVideoTool(args);
+  },
 };
 
   /// Extracts tool name + arguments from an event, runs the handler,

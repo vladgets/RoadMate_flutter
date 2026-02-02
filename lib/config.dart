@@ -274,7 +274,7 @@ $trimmedPrefs''';
           },
           "contact_name": {
             "type": "string",
-            "description": "Contact name.",
+            "description": "Contact name",
           },
         },
         "required": ["contact_name", "phone_number"],
@@ -324,7 +324,7 @@ $trimmedPrefs''';
         "required": ["id"]
       },
     },    
-    /// YouTube subscriptions feed tool
+    /// YouTube tools
     {
       "type": "function",
       "name": "youtube_subscriptions_feed",
@@ -332,6 +332,25 @@ $trimmedPrefs''';
       "parameters": {
         "type": "object",
         "properties": {},
+      }
+    },
+    {
+      "type": "function",
+      "name": "youtube_open_video",
+      "description": "Open a YouTube video.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "video URL"
+          },
+          "startSeconds": {
+            "type": "integer",
+            "description": "Optional start time in seconds. Defaults to 0."
+          }
+        },
+        "required": ["url"]
       }
     }
   ];

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'youtube_history_screen.dart';
-import '../services/youtube.dart';
+import '../services/youtube_client.dart';
 
 
 class DeveloperAreaScreen extends StatefulWidget {

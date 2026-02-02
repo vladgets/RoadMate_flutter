@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../services/youtube_client.dart';
 
@@ -66,13 +65,6 @@ class _YouTubeHistoryScreenState extends State<YouTubeHistoryScreen> {
     return loc.formatMediumDate(dt);
   }
 
-  Future<void> _openVideo(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -129,7 +121,9 @@ class _YouTubeHistoryScreenState extends State<YouTubeHistoryScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text('$dateStr\n${v.url}'),
-                          onTap: () => _openVideo(v.url),
+                          onTap: ()  async {
+                            await openYoutubeVideo(v.url, startSeconds: 0, autoplay: true);
+                          },
                         );
                       },
                     ))),
