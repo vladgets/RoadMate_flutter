@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:firebase_core/firebase_core.dart';
 // import 'package:firebase_messaging/firebase_messaging.dart';
 import 'config.dart';
 import 'ui/main_settings_menu.dart';
+import 'ui/onboarding_screen.dart';
 import 'services/geo_time_tools.dart';
 import 'services/memory_store.dart';
 import 'services/calendar.dart';
@@ -42,14 +44,53 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool? _hasCompletedOnboarding;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkOnboardingStatus();
+  }
+
+  Future<void> _checkOnboardingStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final completed = prefs.getBool('hasCompletedOnboarding') ?? false;
+    setState(() {
+      _hasCompletedOnboarding = completed;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Show loading screen while checking onboarding status
+    if (_hasCompletedOnboarding == null) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: const VoiceButtonPage(),
+      home: _hasCompletedOnboarding!
+          ? const VoiceButtonPage()
+          : const OnboardingScreen(),
+      routes: {
+        '/main': (context) => const VoiceButtonPage(),
+        '/onboarding': (context) => const OnboardingScreen(),
+      },
     );
   }
 }

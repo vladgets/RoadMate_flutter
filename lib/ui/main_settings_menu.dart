@@ -4,6 +4,7 @@ import 'memory_settings_screen.dart';
 import 'extensions_settings_screen.dart';
 import 'reminders_screen.dart';
 import 'developer_area_menu.dart';
+import 'onboarding_screen.dart';
 
 
 class SettingsScreen extends StatefulWidget {
@@ -81,6 +82,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: Text(_voiceLabel(Config.voice)),
             trailing: const Icon(Icons.chevron_right),
             onTap: _pickVoice,
+          ),
+          const Divider(),
+
+          ListTile(
+            leading: const Icon(Icons.help_outline),
+            title: const Text('Tutorial'),
+            subtitle: const Text('View getting started guide'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+              );
+            },
           ),
           const Divider(),
 
