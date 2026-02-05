@@ -21,36 +21,9 @@ class SessionListDrawer extends StatelessWidget {
     return Drawer(
       child: Column(
         children: [
-          // Header
-          DrawerHeader(
-            decoration: BoxDecoration(
-              color: Theme.of(context).primaryColor,
-            ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Icon(
-                  Icons.chat_bubble_outline,
-                  color: Colors.white,
-                  size: 48,
-                ),
-                SizedBox(height: 16),
-                Text(
-                  'Conversation History',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
           // New Chat Button
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 56, 16, 16),
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
