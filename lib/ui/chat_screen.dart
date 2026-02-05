@@ -3,6 +3,7 @@ import '../models/chat_message.dart';
 import '../services/conversation_store.dart';
 import '../services/openai_chat_client.dart';
 import 'main_settings_menu.dart';
+import 'widgets/session_list_drawer.dart';
 
 class ChatScreen extends StatefulWidget {
   final ConversationStore conversationStore;
@@ -52,7 +53,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Add user message
     final userMessage = ChatMessage.userText(text);
-    await widget.conversationStore.addMessage(userMessage);
+    await widget.conversationStore.addMessageToActiveSession(userMessage);
 
     setState(() {
       _isLoading = true;
@@ -65,14 +66,14 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       // Get response from API
       final response = await _chatClient.sendMessage(
-        widget.conversationStore.messages,
+        widget.conversationStore.activeSession.messages,
         text,
         toolExecutor: widget.toolExecutor,
       );
 
       // Add assistant response
       final assistantMessage = ChatMessage.assistant(response);
-      await widget.conversationStore.addMessage(assistantMessage);
+      await widget.conversationStore.addMessageToActiveSession(assistantMessage);
 
       setState(() {
         _isLoading = false;
@@ -132,11 +133,32 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final messages = widget.conversationStore.messages;
+    final messages = widget.conversationStore.activeSession.messages;
+    final sessionTitle = widget.conversationStore.activeSession.title;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chat'),
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            tooltip: 'Conversation History',
+            onPressed: () {
+              Scaffold.of(context).openDrawer();
+            },
+          ),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Chat'),
+            Text(
+              sessionTitle,
+              style: const TextStyle(fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -150,6 +172,15 @@ class _ChatScreenState extends State<ChatScreen> {
             },
           ),
         ],
+      ),
+      drawer: SessionListDrawer(
+        conversationStore: widget.conversationStore,
+        onSessionChanged: () {
+          setState(() {
+            // Rebuild to show new session's messages
+          });
+          _scrollToBottom(animate: false);
+        },
       ),
       body: Column(
         children: [

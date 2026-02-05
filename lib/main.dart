@@ -142,9 +142,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     // Pre-load thinking sound for instant playback
     _preloadThinkingSound();
 
-    // Initialize conversation store
-    ConversationStore.create().then((store) {
+    // Initialize conversation store and create new session on app launch
+    ConversationStore.create().then((store) async {
       _conversationStore = store;
+      // Create a new session on every app launch
+      if (!store.hasSessions) {
+        await store.createNewSession();
+      }
       if (mounted) setState(() {});
     });
 
@@ -420,7 +424,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
       if (transcript is String && transcript.trim().isNotEmpty) {
         debugPrint('🧑 User said: ${transcript.trim()}');
         // Save to conversation store
-        _conversationStore?.addMessage(ChatMessage.userVoice(transcript.trim()));
+        _conversationStore?.addMessageToActiveSession(ChatMessage.userVoice(transcript.trim()));
       }
       return;
     }
@@ -430,7 +434,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
       if (transcript is String && transcript.trim().isNotEmpty) {
         debugPrint('🤖 Assistant said: ${transcript.trim()}');
         // Save to conversation store
-        _conversationStore?.addMessage(ChatMessage.assistant(transcript.trim()));
+        _conversationStore?.addMessageToActiveSession(ChatMessage.assistant(transcript.trim()));
       }
       return;
     }
