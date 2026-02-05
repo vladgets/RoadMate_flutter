@@ -304,8 +304,8 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           if (!isUser) ...[
             CircleAvatar(
-              backgroundColor: Colors.grey.shade300,
-              child: const Icon(Icons.assistant, size: 20),
+              backgroundColor: Colors.blue.shade100,
+              child: Icon(Icons.smart_toy, size: 20, color: Colors.blue.shade700),
             ),
             const SizedBox(width: 8),
           ],
