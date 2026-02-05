@@ -42,6 +42,7 @@ flutter:
   assets:
     - assets/icon/app_icon_square.png
     - assets/icon/app_icon_round.png
+    - assets/sounds/thinking.mp3
 
 flutter_icons:
   android: true

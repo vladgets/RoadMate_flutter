@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:firebase_core/firebase_core.dart';
 // import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:just_audio/just_audio.dart';
 import 'config.dart';
 import 'ui/main_settings_menu.dart';
 import 'ui/onboarding_screen.dart';
@@ -124,10 +125,16 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   // Deduplicate tool calls (Realtime may emit in_progress + completed, and can resend events).
   final Set<String> _handledToolCallIds = <String>{};
 
+  // Audio player for thinking sound during long-running tool execution
+  final AudioPlayer _thinkingSoundPlayer = AudioPlayer();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Pre-load thinking sound for instant playback
+    _preloadThinkingSound();
 
     // Ensure we have a stable client id for Gmail token storage on the server.
     ClientIdStore.getOrCreate().then((cid) {
@@ -157,14 +164,22 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
 
   @override
   void dispose() {
+    _thinkingSoundPlayer.dispose();
     _webSearchClient.close();
     _disconnect();
-    WidgetsBinding.instance.removeObserver(this);    
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Stop thinking sound when app goes to background
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      _stopThinkingSound();
+    }
+
     // When app returns to foreground, auto-start mic session if not connected.
     if (state == AppLifecycleState.resumed) {
       if (!mounted) return;
@@ -314,6 +329,9 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   }
 
   Future<void> _disconnect() async {
+    // Stop thinking sound if it's playing (non-blocking)
+    _stopThinkingSound();
+
     try {
       await _dc?.close();
       await _pc?.close();
@@ -503,6 +521,21 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     final toolHandler = _tools[toolName];
     if (toolHandler == null) return;
 
+    // List of tools that typically take longer and should have thinking sound
+    final longRunningTools = {
+      'web_search',
+      'gmail_search',
+      'gmail_read_email',
+      'traffic_eta',
+      'youtube_get_subscriptions_feed',
+    };
+
+    // Start thinking sound for long-running tools
+    final shouldPlaySound = longRunningTools.contains(toolName);
+    if (shouldPlaySound) {
+      _playThinkingSound(); // Fire and forget - don't await
+    }
+
     try {
       final Map<String, dynamic> result = await toolHandler(args);
       await _sendToolOutput(callId: callId, name: toolName, output: result);
@@ -513,7 +546,40 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
         name: toolName,
         output: {'error': e.toString()},
       );
+    } finally {
+      // Stop thinking sound after tool completes
+      if (shouldPlaySound) {
+        _stopThinkingSound(); // Fire and forget - don't await
+      }
     }
+  }
+
+  /// Pre-loads thinking sound during initialization for instant playback
+  Future<void> _preloadThinkingSound() async {
+    try {
+      await _thinkingSoundPlayer.setAsset('assets/sounds/thinking.mp3');
+      await _thinkingSoundPlayer.setLoopMode(LoopMode.one);
+      await _thinkingSoundPlayer.setVolume(0.3); // Subtle volume
+      debugPrint('>>> Thinking sound pre-loaded successfully');
+    } catch (e) {
+      debugPrint('>>> Error pre-loading thinking sound: $e');
+      // Fail silently - sound is optional
+    }
+  }
+
+  /// Plays the pre-loaded thinking sound (non-blocking)
+  void _playThinkingSound() {
+    _thinkingSoundPlayer.play().catchError((e) {
+      debugPrint('>>> Error playing thinking sound: $e');
+      // Fail silently - sound is optional
+    });
+  }
+
+  /// Stops the thinking sound (non-blocking)
+  void _stopThinkingSound() {
+    _thinkingSoundPlayer.stop().catchError((e) {
+      debugPrint('>>> Error stopping thinking sound: $e');
+    });
   }
 
   /// Sends tool output back to the model.
