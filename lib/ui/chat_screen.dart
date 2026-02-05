@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import '../models/chat_message.dart';
 import '../services/conversation_store.dart';
 import '../services/openai_chat_client.dart';
+import 'main_settings_menu.dart';
 
 class ChatScreen extends StatefulWidget {
   final ConversationStore conversationStore;
+  final Future<Map<String, dynamic>> Function(String toolName, dynamic args)? toolExecutor;
 
   const ChatScreen({
     super.key,
     required this.conversationStore,
+    this.toolExecutor,
   });
 
   @override
@@ -26,6 +29,11 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _chatClient = OpenAIChatClient();
+
+    // Scroll to bottom when screen first loads (without animation)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom(animate: false);
+    });
   }
 
   @override
@@ -59,10 +67,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final response = await _chatClient.sendMessage(
         widget.conversationStore.messages,
         text,
-        onToolCall: (toolCall) {
-          // TODO: Integrate with tool execution from main.dart
-          debugPrint('Tool call requested: ${toolCall['name']}');
-        },
+        toolExecutor: widget.toolExecutor,
       );
 
       // Add assistant response
@@ -83,14 +88,39 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _scrollToBottom() {
+  void _scrollToBottom({bool animate = true}) {
+    // Schedule scroll after current frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+      // Use multiple delayed attempts to ensure we reach the bottom
+      _attemptScroll(animate, attempts: 0);
+    });
+  }
+
+  void _attemptScroll(bool animate, {required int attempts}) {
+    if (!mounted || !_scrollController.hasClients || attempts >= 3) return;
+
+    Future.delayed(Duration(milliseconds: 100 + (attempts * 50)), () {
+      if (!mounted || !_scrollController.hasClients) return;
+
+      final position = _scrollController.position;
+      final target = position.maxScrollExtent;
+
+      // Only scroll if we're not already at the bottom
+      if ((position.pixels - target).abs() > 10) {
+        if (animate && attempts == 0) {
+          _scrollController.animateTo(
+            target,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        } else {
+          _scrollController.jumpTo(target);
+        }
+
+        // Try again after a short delay to ensure we reached the bottom
+        if (attempts < 2) {
+          _attemptScroll(false, attempts: attempts + 1);
+        }
       }
     });
   }
@@ -110,8 +140,13 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
             onPressed: () {
-              Navigator.pushNamed(context, '/settings');
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const SettingsScreen(),
+                ),
+              );
             },
           ),
         ],

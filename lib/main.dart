@@ -183,6 +183,27 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     super.dispose();
   }
 
+  /// Execute a tool by name and return the result
+  /// This can be called from chat screen for tool execution
+  Future<Map<String, dynamic>> executeTool(String toolName, dynamic args) async {
+    debugPrint('>>> Executing tool from chat: $toolName with args: $args');
+
+    final toolHandler = _tools[toolName];
+    if (toolHandler == null) {
+      debugPrint('>>> Tool not found: $toolName');
+      return {'error': 'Unknown tool: $toolName'};
+    }
+
+    try {
+      final result = await toolHandler(args);
+      debugPrint('>>> Tool execution result: $result');
+      return result;
+    } catch (e) {
+      debugPrint('>>> Tool execution error: $e');
+      return {'error': e.toString()};
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Stop thinking sound when app goes to background
@@ -652,6 +673,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
                       MaterialPageRoute(
                         builder: (_) => ChatScreen(
                           conversationStore: _conversationStore!,
+                          toolExecutor: executeTool,
                         ),
                       ),
                     );

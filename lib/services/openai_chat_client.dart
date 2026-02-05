@@ -13,7 +13,7 @@ class OpenAIChatClient {
   Future<String> sendMessage(
     List<ChatMessage> conversationHistory,
     String newMessage, {
-    Function(Map<String, dynamic>)? onToolCall,
+    Future<Map<String, dynamic>> Function(String toolName, dynamic args)? toolExecutor,
   }) async {
     // Build messages array for API
     final messages = [
@@ -36,6 +36,18 @@ class OpenAIChatClient {
       },
     ];
 
+    // Transform tools from Realtime API format to Chat Completions API format
+    final chatTools = Config.tools.map((tool) {
+      return {
+        'type': 'function',
+        'function': {
+          'name': tool['name'],
+          'description': tool['description'],
+          'parameters': tool['parameters'],
+        },
+      };
+    }).toList();
+
     // Make API call via server proxy
     final response = await http.post(
       Uri.parse('${Config.serverUrl}/chat'),
@@ -45,7 +57,8 @@ class OpenAIChatClient {
       body: json.encode({
         'model': 'gpt-4o-mini',
         'messages': messages,
-        'tools': Config.tools,
+        'tools': chatTools,
+        'tool_choice': 'auto',
       }),
     );
 
@@ -62,7 +75,8 @@ class OpenAIChatClient {
       return await _handleToolCalls(
         choice['message']['tool_calls'],
         messages,
-        onToolCall,
+        chatTools,
+        toolExecutor,
       );
     }
 
@@ -74,7 +88,8 @@ class OpenAIChatClient {
   Future<String> _handleToolCalls(
     List<dynamic> toolCalls,
     List<Map<String, dynamic>> messages,
-    Function(Map<String, dynamic>)? onToolCall,
+    List<Map<String, dynamic>> chatTools,
+    Future<Map<String, dynamic>> Function(String toolName, dynamic args)? toolExecutor,
   ) async {
     // Execute all tool calls
     final toolMessages = <Map<String, dynamic>>[];
@@ -83,23 +98,24 @@ class OpenAIChatClient {
       final toolCallId = toolCall['id'] as String;
       final functionName = toolCall['function']['name'] as String;
       final argumentsJson = toolCall['function']['arguments'] as String;
+      final arguments = json.decode(argumentsJson);
 
-      // Notify callback
-      if (onToolCall != null) {
-        onToolCall({
-          'name': functionName,
-          'arguments': json.decode(argumentsJson),
-        });
+      // Execute tool if executor is provided
+      Map<String, dynamic> result;
+      if (toolExecutor != null) {
+        try {
+          result = await toolExecutor(functionName, arguments);
+        } catch (e) {
+          result = {'error': e.toString()};
+        }
+      } else {
+        result = {'error': 'Tool execution not available'};
       }
 
-      // Execute tool (this will be delegated to main.dart's tool handlers)
-      // For now, we'll return a placeholder - actual integration happens in chat_screen.dart
       toolMessages.add({
         'role': 'tool',
         'tool_call_id': toolCallId,
-        'content': json.encode({
-          'error': 'Tool execution not yet integrated',
-        }),
+        'content': json.encode(result),
       });
     }
 
@@ -121,6 +137,8 @@ class OpenAIChatClient {
       body: json.encode({
         'model': 'gpt-4o-mini',
         'messages': followUpMessages,
+        'tools': chatTools,
+        'tool_choice': 'auto',
       }),
     );
 
@@ -130,7 +148,20 @@ class OpenAIChatClient {
     }
 
     final data = json.decode(response.body);
-    return data['choices'][0]['message']['content'] as String? ?? '';
+    final choice = data['choices'][0];
+
+    // Check if the assistant wants to make more tool calls
+    if (choice['message']['tool_calls'] != null) {
+      // Recursively handle more tool calls
+      return await _handleToolCalls(
+        choice['message']['tool_calls'],
+        followUpMessages,
+        chatTools,
+        toolExecutor,
+      );
+    }
+
+    return choice['message']['content'] as String? ?? '';
   }
 
   String _getCurrentDate() {
