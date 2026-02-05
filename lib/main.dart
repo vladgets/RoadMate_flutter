@@ -12,6 +12,8 @@ import 'package:just_audio/just_audio.dart';
 import 'config.dart';
 import 'ui/main_settings_menu.dart';
 import 'ui/onboarding_screen.dart';
+import 'ui/chat_screen.dart';
+import 'models/chat_message.dart';
 import 'services/geo_time_tools.dart';
 import 'services/memory_store.dart';
 import 'services/calendar.dart';
@@ -21,6 +23,7 @@ import 'services/map_navigation.dart';
 import 'services/phone_call.dart';
 import 'services/reminders.dart';
 import 'services/youtube_client.dart';
+import 'services/conversation_store.dart';
 // import 'firebase_messaging.dart';
 
 
@@ -107,7 +110,7 @@ class VoiceButtonPage extends StatefulWidget {
 // final String tokenServerUrl = "http://10.0.2.2:3000/token";
 const tokenServerUrl = '${Config.serverUrl}/token';
 
-class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingObserver {  
+class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingObserver {
   RTCPeerConnection? _pc;
   RTCDataChannel? _dc;
   MediaStream? _mic;
@@ -128,6 +131,9 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   // Audio player for thinking sound during long-running tool execution
   final AudioPlayer _thinkingSoundPlayer = AudioPlayer();
 
+  // Conversation store for chat history
+  ConversationStore? _conversationStore;
+
   @override
   void initState() {
     super.initState();
@@ -135,6 +141,12 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
 
     // Pre-load thinking sound for instant playback
     _preloadThinkingSound();
+
+    // Initialize conversation store
+    ConversationStore.create().then((store) {
+      _conversationStore = store;
+      if (mounted) setState(() {});
+    });
 
     // Ensure we have a stable client id for Gmail token storage on the server.
     ClientIdStore.getOrCreate().then((cid) {
@@ -386,6 +398,8 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
       final transcript = evt['transcript'];
       if (transcript is String && transcript.trim().isNotEmpty) {
         debugPrint('🧑 User said: ${transcript.trim()}');
+        // Save to conversation store
+        _conversationStore?.addMessage(ChatMessage.userVoice(transcript.trim()));
       }
       return;
     }
@@ -394,6 +408,8 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
       final transcript = evt['transcript'];
       if (transcript is String && transcript.trim().isNotEmpty) {
         debugPrint('🤖 Assistant said: ${transcript.trim()}');
+        // Save to conversation store
+        _conversationStore?.addMessage(ChatMessage.assistant(transcript.trim()));
       }
       return;
     }
@@ -626,6 +642,21 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
+          IconButton(
+            tooltip: 'Chat',
+            icon: const Icon(Icons.chat_bubble_outline),
+            onPressed: _conversationStore == null
+                ? null
+                : () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ChatScreen(
+                          conversationStore: _conversationStore!,
+                        ),
+                      ),
+                    );
+                  },
+          ),
           IconButton(
             tooltip: 'Settings',
             icon: const Icon(Icons.settings),

@@ -51,7 +51,6 @@ flutter run
 # Build for specific platforms
 flutter build apk          # Android
 flutter build ios          # iOS (requires macOS)
-flutter build macos        # macOS desktop
 
 # Run tests
 flutter test

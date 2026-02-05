@@ -139,5 +139,40 @@ app.post("/websearch", async (req, res) => {
   }
 });
 
+// Chat completions endpoint (proxy for text chat)
+app.post("/chat", async (req, res) => {
+  try {
+    const { messages, tools, model } = req.body ?? {};
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: "Missing required field: messages" });
+    }
+
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: model || "gpt-4o-mini",
+        messages: messages,
+        tools: tools || [],
+        temperature: 0.7,
+      }),
+    });
+
+    const data = await r.json();
+
+    if (!r.ok) {
+      return res.status(r.status).json({ error: data?.error?.message || "OpenAI error" });
+    }
+
+    return res.status(200).json(data);
+
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 
 app.listen(3000, () => console.log("Token server on :3000"));
