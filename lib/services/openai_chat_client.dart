@@ -2,15 +2,24 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config.dart';
 import '../models/chat_message.dart';
+import '../models/photo_attachment.dart';
+
+/// Response from chat API with optional photo attachments
+class ChatResponse {
+  final String text;
+  final List<PhotoAttachment>? photos;
+
+  ChatResponse(this.text, {this.photos});
+}
 
 /// Client for OpenAI Chat Completions API (text-based chat)
 class OpenAIChatClient {
   OpenAIChatClient();
 
   /// Send a chat message and get a response
-  /// Returns the assistant's response text
+  /// Returns the assistant's response (text and optional photos)
   /// Throws exception on error
-  Future<String> sendMessage(
+  Future<ChatResponse> sendMessage(
     List<ChatMessage> conversationHistory,
     String newMessage, {
     Future<Map<String, dynamic>> Function(String toolName, dynamic args)? toolExecutor,
@@ -81,11 +90,11 @@ class OpenAIChatClient {
     }
 
     // Return assistant's text response
-    return choice['message']['content'] as String? ?? '';
+    return ChatResponse(choice['message']['content'] as String? ?? '');
   }
 
   /// Handle tool calls from assistant
-  Future<String> _handleToolCalls(
+  Future<ChatResponse> _handleToolCalls(
     List<dynamic> toolCalls,
     List<Map<String, dynamic>> messages,
     List<Map<String, dynamic>> chatTools,
@@ -93,6 +102,7 @@ class OpenAIChatClient {
   ) async {
     // Execute all tool calls
     final toolMessages = <Map<String, dynamic>>[];
+    List<PhotoAttachment>? photos;
 
     for (final toolCall in toolCalls) {
       final toolCallId = toolCall['id'] as String;
@@ -105,6 +115,22 @@ class OpenAIChatClient {
       if (toolExecutor != null) {
         try {
           result = await toolExecutor(functionName, arguments);
+
+          // Check if this is a search_photos result
+          if (functionName == 'search_photos' &&
+              result['ok'] == true &&
+              result['photos'] != null) {
+            final photosList = result['photos'] as List<dynamic>;
+            photos = photosList.map((p) => PhotoAttachment(
+              path: p['path'] as String,
+              location: p['location'] as String?,
+              timestamp: p['timestamp'] != null
+                ? DateTime.parse(p['timestamp'] as String)
+                : null,
+              latitude: p['latitude'] as double?,
+              longitude: p['longitude'] as double?,
+            )).toList();
+          }
         } catch (e) {
           result = {'error': e.toString()};
         }
@@ -161,7 +187,10 @@ class OpenAIChatClient {
       );
     }
 
-    return choice['message']['content'] as String? ?? '';
+    return ChatResponse(
+      choice['message']['content'] as String? ?? '',
+      photos: photos,
+    );
   }
 
   String _getCurrentDate() {

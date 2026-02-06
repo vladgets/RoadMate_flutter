@@ -24,6 +24,7 @@ import 'services/phone_call.dart';
 import 'services/reminders.dart';
 import 'services/youtube_client.dart';
 import 'services/conversation_store.dart';
+import 'services/photo_index_service.dart';
 // import 'firebase_messaging.dart';
 
 
@@ -40,6 +41,9 @@ Future<void> main() async {
 
   // Initialize reminders service
   await RemindersService.instance.init();
+
+  // Initialize photo index service
+  await PhotoIndexService.instance.init();
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -542,6 +546,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   'youtube_open_video': (args) async {
     return await openYoutubeVideoTool(args);
   },
+  // Photo album search tool
+  'search_photos': (args) async {
+    return await PhotoIndexService.instance.toolSearchPhotos(args);
+  },
 };
 
   /// Extracts tool name + arguments from an event, runs the handler,
@@ -672,7 +680,16 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
             icon: const Icon(Icons.chat_bubble_outline),
             onPressed: _conversationStore == null
                 ? null
-                : () {
+                : () async {
+                    // Disconnect voice if active
+                    if (_connected) {
+                      await _disconnect();
+                    }
+
+                    // Use mounted check before async navigation
+                    if (!mounted) return;
+
+                    // ignore: use_build_context_synchronously
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => ChatScreen(

@@ -1,9 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../models/chat_message.dart';
+import '../models/photo_attachment.dart';
 import '../services/conversation_store.dart';
 import '../services/openai_chat_client.dart';
 import 'main_settings_menu.dart';
 import 'widgets/session_list_drawer.dart';
+import 'widgets/photo_viewer.dart';
 
 class ChatScreen extends StatefulWidget {
   final ConversationStore conversationStore;
@@ -71,8 +75,10 @@ class _ChatScreenState extends State<ChatScreen> {
         toolExecutor: widget.toolExecutor,
       );
 
-      // Add assistant response
-      final assistantMessage = ChatMessage.assistant(response);
+      // Add assistant response (with photos if available)
+      final assistantMessage = response.photos != null && response.photos!.isNotEmpty
+          ? ChatMessage.assistantWithPhotos(response.text, response.photos!)
+          : ChatMessage.assistant(response.text);
       await widget.conversationStore.addMessageToActiveSession(assistantMessage);
 
       setState(() {
@@ -325,6 +331,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildMessageBubble(ChatMessage message) {
     final isUser = message.role == 'user';
     final isVoice = message.type == 'voice_transcript';
+    final hasPhotos = message.photos != null && message.photos!.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -380,6 +387,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       fontSize: 16,
                     ),
                   ),
+                  if (hasPhotos) ...[
+                    const SizedBox(height: 12),
+                    _buildPhotoGallery(message.photos!),
+                  ],
                 ],
               ),
             ),
@@ -391,6 +402,90 @@ class _ChatScreenState extends State<ChatScreen> {
               child: const Icon(Icons.person, size: 20, color: Colors.white),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhotoGallery(List<PhotoAttachment> photos) {
+    return SizedBox(
+      height: 180, // Increased to accommodate labels
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: photos.length,
+        itemBuilder: (context, index) {
+          final photo = photos[index];
+          return _buildPhotoWithLabel(photo, photos, index);
+        },
+      ),
+    );
+  }
+
+  Widget _buildPhotoWithLabel(PhotoAttachment photo, List<PhotoAttachment> allPhotos, int index) {
+    return Container(
+      width: 140,
+      margin: const EdgeInsets.only(right: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Photo thumbnail
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PhotoViewer(
+                    photos: allPhotos,
+                    initialIndex: index,
+                  ),
+                ),
+              );
+            },
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.grey[300],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(
+                  File(photo.path),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Center(
+                      child: Icon(Icons.broken_image, color: Colors.grey),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Date label
+          if (photo.timestamp != null)
+            Text(
+              DateFormat.MMMd().format(photo.timestamp!),
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          // Location label
+          if (photo.location != null)
+            Text(
+              photo.location!,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[600],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
         ],
       ),
     );

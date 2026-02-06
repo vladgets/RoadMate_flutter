@@ -1,11 +1,14 @@
+import 'photo_attachment.dart';
+
 /// Model for chat messages in the conversation history
 class ChatMessage {
   final String id;
   final String role; // 'user' or 'assistant'
   final String content;
   final DateTime timestamp;
-  final String type; // 'text' or 'voice_transcript'
+  final String type; // 'text', 'voice_transcript', or 'text_with_images'
   final String status; // 'sending', 'sent', 'error'
+  final List<PhotoAttachment>? photos; // Optional photo attachments
 
   ChatMessage({
     required this.id,
@@ -14,6 +17,7 @@ class ChatMessage {
     required this.timestamp,
     this.type = 'text',
     this.status = 'sent',
+    this.photos,
   });
 
   /// Create a user text message
@@ -52,6 +56,19 @@ class ChatMessage {
     );
   }
 
+  /// Create an assistant message with photo attachments
+  factory ChatMessage.assistantWithPhotos(String content, List<PhotoAttachment> photos) {
+    return ChatMessage(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      role: 'assistant',
+      content: content,
+      timestamp: DateTime.now(),
+      type: 'text_with_images',
+      status: 'sent',
+      photos: photos,
+    );
+  }
+
   /// Create a copy with updated fields
   ChatMessage copyWith({
     String? id,
@@ -60,6 +77,7 @@ class ChatMessage {
     DateTime? timestamp,
     String? type,
     String? status,
+    List<PhotoAttachment>? photos,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -68,6 +86,7 @@ class ChatMessage {
       timestamp: timestamp ?? this.timestamp,
       type: type ?? this.type,
       status: status ?? this.status,
+      photos: photos ?? this.photos,
     );
   }
 
@@ -80,11 +99,13 @@ class ChatMessage {
       'timestamp': timestamp.toIso8601String(),
       'type': type,
       'status': status,
+      'photos': photos?.map((p) => p.toJson()).toList(),
     };
   }
 
   /// Deserialize from JSON
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    final photosList = json['photos'] as List<dynamic>?;
     return ChatMessage(
       id: json['id'] as String,
       role: json['role'] as String,
@@ -92,6 +113,7 @@ class ChatMessage {
       timestamp: DateTime.parse(json['timestamp'] as String),
       type: json['type'] as String? ?? 'text',
       status: json['status'] as String? ?? 'sent',
+      photos: photosList?.map((p) => PhotoAttachment.fromJson(p as Map<String, dynamic>)).toList(),
     );
   }
 

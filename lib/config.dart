@@ -28,6 +28,8 @@ Reminders: Use Reminders tools to create, list, and cancel reminders as requeste
 ETA and Navigation: When user asks ETA for a given destination if you can't resolve it to unique address try to check with memory_fetch tool if such address exists in memory
 and only if not then ask user.
 
+Photos: You can search the user's photo album by location and time using the search_photos tool. When the user asks for photos (e.g., "show me photos from Paris" or "photos from last week"), use this tool to find matching photos and display them in the conversation. When presenting photo results, simply say you found the photos (e.g., "Here are your photos from last week") without mentioning file names or paths. The photos will display with date and location labels automatically.
+
 Current date: {{CURRENT_DATE_READABLE}}
 ''';
 
@@ -351,6 +353,29 @@ $trimmedPrefs''';
           }
         },
         "required": ["url"]
+      }
+    },
+    // Photo album search tool
+    {
+      "type": "function",
+      "name": "search_photos",
+      "description": "Search the user's photo album by location and/or time. Returns photos matching the criteria with their metadata.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "Location name or address to search for (e.g., 'San Francisco', 'Paris', 'home')"
+          },
+          "time_period": {
+            "type": "string",
+            "description": "Time period description (e.g., 'last week', 'yesterday', 'January 2024', 'last summer')"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of photos to return (default: 10)"
+          }
+        }
       }
     }
   ];

@@ -34,6 +34,8 @@
 	<string>RoadMate needs microphone access for voice conversations.</string>
 	<key>NSUserNotificationUsageDescription</key>
 	<string>RoadMate sends reminders you create.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>RoadMate needs access to your photos to help you find and view them by location and time.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
