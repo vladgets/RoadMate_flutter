@@ -3,7 +3,24 @@
     "allow": [
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(flutter analyze:*)",
+      "WebSearch",
+      "WebFetch(domain:pixabay.com)",
+      "WebFetch(domain:freesound.org)",
+      "Bash(ls:*)",
+      "Bash(flutter pub get:*)",
+      "Bash(flutter run)",
+      "Bash(flutter run:*)",
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(flutter clean:*)",
+      "Bash(flutter devices:*)",
+      "Bash(flutter pub add:*)",
+      "Bash(flutter build apk:*)",
+      "Bash(tee:*)",
+      "Bash(adb:*)",
+      "Bash(git rm:*)"
     ]
   }
 }

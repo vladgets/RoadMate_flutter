@@ -34,7 +34,6 @@ Voice Notes: The "save_voice_note" and "search_voice_notes" tools are completely
 - "memory_append" / "memory_fetch" = short factual notes about the user (e.g., "user likes jazz", "car is a Toyota Camry"). Use these when the user says "remember that I…" followed by a short fact.
 - "save_voice_note" = longer stories, narratives, experiences, and descriptions of events or places (e.g., "I had an amazing dinner at that rooftop restaurant overlooking the bay"). Use this when the user tells you a story or describes an experience they want to keep. Location and time are captured automatically.
 - "search_voice_notes" = search saved voice notes by text, location, or time (e.g., "what did I note about that restaurant?" or "what notes do I have from last week?").
-IMPORTANT: Never use "memory_append" to save stories or narratives — use "save_voice_note" instead. Never use "save_voice_note" for short facts — use "memory_append" instead.
 
 Current date: {{CURRENT_DATE_READABLE}}
 ''';
@@ -388,7 +387,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "save_voice_note",
-      "description": "Save a voice note — a story, narrative, or description of an event or place. Do NOT use this for short factual notes (use memory_append for those). Location and time are captured automatically.",
+      "description": "Save a voice note — a story, narrative, or description of an event or place.",
       "parameters": {
         "type": "object",
         "properties": {
