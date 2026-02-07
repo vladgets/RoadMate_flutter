@@ -122,6 +122,7 @@ class OpenAIChatClient {
               result['photos'] != null) {
             final photosList = result['photos'] as List<dynamic>;
             photos = photosList.map((p) => PhotoAttachment(
+              id: p['id'] as String,
               path: p['path'] as String,
               location: p['location'] as String?,
               timestamp: p['timestamp'] != null

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'youtube_history_screen.dart';
+import '../services/photo_index_service.dart';
 import '../services/youtube_client.dart';
 
 
@@ -34,6 +35,88 @@ class _SettingsScreenState extends State<DeveloperAreaScreen> {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const YouTubeHistoryScreen()),
+              );
+            },
+          ),
+          const Divider(),
+          Builder(
+            builder: (context) {
+              final stats = PhotoIndexService.instance.getStats();
+              final indexed = stats['indexed'] as int;
+              final total = stats['total'] as int;
+              final subtitle = indexed == 0
+                  ? 'Not indexed yet'
+                  : '$indexed of $total photos indexed';
+              return ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Photo Album Index'),
+                subtitle: Text(subtitle),
+                trailing: IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Rebuild Index',
+                  onPressed: () async {
+                    // Show confirmation dialog
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Rebuild Photo Index?'),
+                        content: const Text(
+                          'This will rebuild the entire photo index. '
+                          'Only camera photos will be included. '
+                          'This may take a few minutes.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Rebuild'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm != true) return;
+
+                    // Show progress dialog
+                    if (!context.mounted) return;
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => const AlertDialog(
+                        content: Row(
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(width: 20),
+                            Text('Rebuilding index...'),
+                          ],
+                        ),
+                      ),
+                    );
+
+                    // Rebuild index
+                    final result = await PhotoIndexService.instance.buildIndex(forceRebuild: true);
+
+                    // Close progress dialog
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
+
+                    // Show result
+                    if (!context.mounted) return;
+                    final message = result['ok'] == true
+                        ? 'Index rebuilt successfully!\n${result['indexed']} photos indexed'
+                        : 'Failed to rebuild index: ${result['error']}';
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(message)),
+                    );
+
+                    // Refresh UI
+                    setState(() {});
+                  },
+                ),
               );
             },
           ),

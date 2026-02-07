@@ -1,6 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:photo_manager/photo_manager.dart';
+import 'dart:typed_data';
 import '../../models/photo_attachment.dart';
 
 /// Full-screen photo viewer with swipe navigation
@@ -56,19 +57,7 @@ class _PhotoViewerState extends State<PhotoViewer> {
                 child: InteractiveViewer(
                   minScale: 0.5,
                   maxScale: 4.0,
-                  child: Image.file(
-                    File(photo.path),
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Center(
-                        child: Icon(
-                          Icons.broken_image,
-                          color: Colors.white,
-                          size: 64,
-                        ),
-                      );
-                    },
-                  ),
+                  child: _FullSizePhotoWidget(assetId: photo.id),
                 ),
               );
             },
@@ -175,6 +164,106 @@ class _PhotoViewerState extends State<PhotoViewer> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Widget for displaying full-size photos using asset ID
+class _FullSizePhotoWidget extends StatefulWidget {
+  final String assetId;
+
+  const _FullSizePhotoWidget({required this.assetId});
+
+  @override
+  State<_FullSizePhotoWidget> createState() => _FullSizePhotoWidgetState();
+}
+
+class _FullSizePhotoWidgetState extends State<_FullSizePhotoWidget> {
+  Uint8List? _imageData;
+  bool _isLoading = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImage();
+  }
+
+  Future<void> _loadImage() async {
+    try {
+      final asset = await AssetEntity.fromId(widget.assetId);
+      if (asset == null) {
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      // Load original size image
+      final file = await asset.file;
+      if (file == null) {
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      final imageData = await file.readAsBytes();
+
+      if (mounted) {
+        setState(() {
+          _imageData = imageData;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: Colors.white,
+        ),
+      );
+    }
+
+    if (_hasError || _imageData == null) {
+      return const Center(
+        child: Icon(
+          Icons.broken_image,
+          color: Colors.white,
+          size: 64,
+        ),
+      );
+    }
+
+    return Image.memory(
+      _imageData!,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) {
+        return const Center(
+          child: Icon(
+            Icons.broken_image,
+            color: Colors.white,
+            size: 64,
+          ),
+        );
+      },
     );
   }
 }

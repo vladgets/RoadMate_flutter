@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../models/photo_index.dart';
@@ -12,7 +13,7 @@ class PhotoIndexService {
 
   static const String _storageKey = 'photo_album_index';
   static const int _batchSize = 100; // Process in batches
-  static const int _maxPhotosToIndex = 2000; // Limit to last 2 years (approx)
+  static const int _maxPhotosToIndex = 20000;
 
   PhotoIndex? _index;
   bool _isIndexing = false;
@@ -208,6 +209,62 @@ class PhotoIndexService {
     }
   }
 
+  /// Check if a photo was taken by the device camera (not saved/downloaded/screenshot)
+  bool _isCameraPhoto(AssetEntity asset, String filePath) {
+    final path = filePath.toLowerCase();
+    final filename = path.split('/').last;
+
+    if (Platform.isAndroid) {
+      // On Android, camera photos live in DCIM/Camera/
+      final relativePath = asset.relativePath?.toLowerCase() ?? '';
+      if (!relativePath.startsWith('dcim/camera')) {
+        return false;
+      }
+    }
+
+    if (Platform.isIOS) {
+      // Exclude screenshots using mediaSubtypes
+      if (asset.subtype == 2) { // AssetSubtype.screenshot = 2
+        return false;
+      }
+
+      // On iOS, camera shoots HEIC or JPEG — never PNG.
+      // PNGs are screenshots or saved images.
+      if (filename.endsWith('.png')) {
+        return false;
+      }
+
+      // Exclude files with "screenshot" in the name
+      if (filename.contains('screenshot')) {
+        return false;
+      }
+    }
+
+    // Cross-platform: exclude photos from messaging/social apps
+    final excludedPaths = [
+      'whatsapp',
+      'download',
+      'downloads',
+      'screenshot',
+      'telegram',
+      'instagram',
+      'facebook',
+      'snapchat',
+      'twitter',
+      'messenger',
+      'saved images',
+      'pictures/reddit',
+    ];
+
+    for (final excluded in excludedPaths) {
+      if (path.contains(excluded)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   /// Extract metadata from a photo asset
   Future<PhotoMetadata?> _extractMetadata(AssetEntity asset) async {
     try {
@@ -215,25 +272,9 @@ class PhotoIndexService {
       final file = await asset.file;
       if (file == null) return null;
 
-      // Filter out photos from WhatsApp, Downloads, Screenshots, and other apps
-      final path = file.path.toLowerCase();
-      final excludedPaths = [
-        'whatsapp',
-        'download',
-        'downloads',
-        'screenshot',
-        'telegram',
-        'instagram',
-        'facebook',
-        'snapchat',
-        'twitter',
-        'messenger',
-      ];
-
-      for (final excluded in excludedPaths) {
-        if (path.contains(excluded)) {
-          return null; // Skip this photo
-        }
+      // Only include photos taken by the device camera
+      if (!_isCameraPhoto(asset, file.path)) {
+        return null;
       }
 
       // Get GPS coordinates
@@ -352,6 +393,15 @@ class PhotoIndexService {
     return results;
   }
 
+  /// Start building the index in the background (non-blocking)
+  void buildIndexInBackground() {
+    if (_isIndexing || (_index != null && _index!.photos.isNotEmpty && !needsUpdate())) {
+      return;
+    }
+    // Fire and forget
+    buildIndex();
+  }
+
   /// Tool handler for search_photos
   Future<Map<String, dynamic>> toolSearchPhotos(dynamic args) async {
     // ignore: avoid_print
@@ -362,18 +412,20 @@ class PhotoIndexService {
       await init();
     }
 
-    // If index is empty, build it
+    // If index is empty and currently building, tell user to wait
     if (_index!.photos.isEmpty) {
-      // ignore: avoid_print
-      print('[PhotoIndexService] Index is empty, building index...');
-      final buildResult = await buildIndex();
-      if (buildResult['ok'] != true) {
-        // ignore: avoid_print
-        print('[PhotoIndexService] Failed to build index: $buildResult');
-        return buildResult;
+      if (_isIndexing) {
+        return {
+          'ok': false,
+          'error': 'Photo index is currently being built. Please try again in a moment.',
+        };
       }
-      // ignore: avoid_print
-      print('[PhotoIndexService] Index built successfully: ${buildResult['indexed']} photos');
+      // Not indexing and empty — start background build and return message
+      buildIndexInBackground();
+      return {
+        'ok': false,
+        'error': 'Photo index is being built for the first time. Please try again in a minute.',
+      };
     }
 
     // Parse arguments

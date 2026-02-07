@@ -9,7 +9,7 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBindingObserver {
   bool _microphoneGranted = false;
   bool _locationGranted = false;
   bool _calendarGranted = false;
@@ -18,7 +18,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkInitialPermissions();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-check permissions when returning from Settings
+    if (state == AppLifecycleState.resumed) {
+      _checkInitialPermissions();
+    }
   }
 
   Future<void> _checkInitialPermissions() async {
@@ -35,31 +50,41 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     });
   }
 
+  Future<void> _requestPermission(
+    Permission permission,
+    void Function(bool) onResult,
+  ) async {
+    var status = await permission.request();
+    if (status.isPermanentlyDenied) {
+      // iOS won't show the dialog again — open Settings so user can enable it
+      await openAppSettings();
+      // Re-check after returning from Settings
+      status = await permission.status;
+    }
+    onResult(status.isGranted);
+  }
+
   Future<void> _requestMicrophone() async {
-    final status = await Permission.microphone.request();
-    setState(() {
-      _microphoneGranted = status.isGranted;
+    await _requestPermission(Permission.microphone, (granted) {
+      setState(() => _microphoneGranted = granted);
     });
   }
 
   Future<void> _requestLocation() async {
-    final status = await Permission.location.request();
-    setState(() {
-      _locationGranted = status.isGranted;
+    await _requestPermission(Permission.location, (granted) {
+      setState(() => _locationGranted = granted);
     });
   }
 
   Future<void> _requestCalendar() async {
-    final status = await Permission.calendarFullAccess.request();
-    setState(() {
-      _calendarGranted = status.isGranted;
+    await _requestPermission(Permission.calendarFullAccess, (granted) {
+      setState(() => _calendarGranted = granted);
     });
   }
 
   Future<void> _requestNotifications() async {
-    final status = await Permission.notification.request();
-    setState(() {
-      _notificationsGranted = status.isGranted;
+    await _requestPermission(Permission.notification, (granted) {
+      setState(() => _notificationsGranted = granted);
     });
   }
 

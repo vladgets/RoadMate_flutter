@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import '../config.dart';
 import 'memory_settings_screen.dart';
-import 'extensions_settings_screen.dart';
 import 'reminders_screen.dart';
 import 'voice_memories_screen.dart';
 import 'developer_area_menu.dart';
-import 'onboarding_screen.dart';
+import 'app_configuration_screen.dart';
 
 
 class SettingsScreen extends StatefulWidget {
@@ -22,52 +20,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  String _voiceLabel(String v) {
-    if (v == Config.femaleVoice) return 'Female (marin)';
-    if (v == Config.maleVoice) return 'Male (echo)';
-    return v;
-    }
-
-  Future<void> _pickVoice() async {
-    final selected = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return SimpleDialog(
-          title: const Text('Voice'),
-          children: [
-            RadioGroup<String>(
-              groupValue: Config.voice,
-              onChanged: (val) => Navigator.of(context).pop(val),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final v in Config.supportedVoices)
-                    RadioListTile<String>(
-                      value: v,
-                      title: Text(_voiceLabel(v)),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (selected == null || selected == Config.voice) return;
-
-    await Config.setVoice(selected);
-    if (!mounted) return;
-    setState(() {});
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Voice saved. It will apply on the next connection.'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -76,37 +28,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       body: ListView(
         children: [
-          // ✅ NEW: Voice picker
+          // App Configuration submenu
           ListTile(
-            leading: const Icon(Icons.record_voice_over),
-            title: const Text('Voice'),
-            subtitle: Text(_voiceLabel(Config.voice)),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _pickVoice,
-          ),
-          const Divider(),
-
-          ListTile(
-            leading: const Icon(Icons.help_outline),
-            title: const Text('Tutorial'),
-            subtitle: const Text('View getting started guide'),
+            leading: const Icon(Icons.tune),
+            title: const Text('App Configuration'),
+            subtitle: const Text('Voice, auto-start, tutorial, and extensions'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-              );
-            },
-          ),
-          const Divider(),
-
-          ListTile(
-            leading: const Icon(Icons.extension),
-            title: const Text('Extensions'),
-            subtitle: const Text('Manage calendar and other extensions'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ExtensionsSettingsScreen()),
+                MaterialPageRoute(builder: (_) => const AppConfigurationScreen()),
               );
             },
           ),

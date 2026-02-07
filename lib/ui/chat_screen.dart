@@ -1,6 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:photo_manager/photo_manager.dart';
+import 'dart:typed_data';
 import '../models/chat_message.dart';
 import '../models/photo_attachment.dart';
 import '../services/conversation_store.dart';
@@ -380,7 +381,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         ],
                       ),
                     ),
-                  Text(
+                  SelectableText(
                     message.content,
                     style: TextStyle(
                       color: isUser ? Colors.white : Colors.black87,
@@ -441,25 +442,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               );
             },
-            child: Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                color: Colors.grey[300],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.file(
-                  File(photo.path),
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Center(
-                      child: Icon(Icons.broken_image, color: Colors.grey),
-                    );
-                  },
-                ),
-              ),
+            child: _PhotoThumbnailWidget(
+              assetId: photo.id,
+              size: 140,
             ),
           ),
           const SizedBox(height: 4),
@@ -488,6 +473,109 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Widget for displaying photo thumbnails using asset ID
+class _PhotoThumbnailWidget extends StatefulWidget {
+  final String assetId;
+  final double size;
+
+  const _PhotoThumbnailWidget({
+    required this.assetId,
+    this.size = 120,
+  });
+
+  @override
+  State<_PhotoThumbnailWidget> createState() => _PhotoThumbnailWidgetState();
+}
+
+class _PhotoThumbnailWidgetState extends State<_PhotoThumbnailWidget> {
+  Uint8List? _thumbnailData;
+  bool _isLoading = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThumbnail();
+  }
+
+  Future<void> _loadThumbnail() async {
+    try {
+      final asset = await AssetEntity.fromId(widget.assetId);
+      if (asset == null) {
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      final thumbnailData = await asset.thumbnailDataWithSize(
+        const ThumbnailSize(200, 200),
+      );
+
+      if (mounted) {
+        setState(() {
+          _thumbnailData = thumbnailData;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: widget.size,
+      height: widget.size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.grey[300],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: _buildContent(),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_isLoading) {
+      return const Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    if (_hasError || _thumbnailData == null) {
+      return const Center(
+        child: Icon(Icons.broken_image, color: Colors.grey),
+      );
+    }
+
+    return Image.memory(
+      _thumbnailData!,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        return const Center(
+          child: Icon(Icons.broken_image, color: Colors.grey),
+        );
+      },
     );
   }
 }
