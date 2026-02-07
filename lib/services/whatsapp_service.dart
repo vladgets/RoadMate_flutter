@@ -1,5 +1,5 @@
 import 'package:url_launcher/url_launcher.dart';
-import 'package:whatsapp_share2/whatsapp_share2.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/whatsapp_contact.dart';
 import 'memory_store.dart';
 import 'photo_index_service.dart';
@@ -74,8 +74,8 @@ class WhatsAppService {
         if (success) {
           return {
             'status': 'success',
-            'message': 'WhatsApp opened with your message and photo to ${contact.name}. '
-                'Please tap Send to confirm.',
+            'message': 'Share sheet opened with your photo and message. '
+                'Select WhatsApp and choose ${contact.name} (${contact.phoneNumber}) to send.',
             'contact': contact.name,
             'phone': contact.phoneNumber,
             'has_photo': true,
@@ -86,7 +86,7 @@ class WhatsAppService {
           if (textSuccess) {
             return {
               'status': 'success',
-              'message': 'Could not attach photo, but WhatsApp opened with your text message to ${contact.name}. '
+              'message': 'Could not share photo. WhatsApp opened with your text message to ${contact.name}. '
                   'Please tap Send to confirm.',
               'contact': contact.name,
               'phone': contact.phoneNumber,
@@ -241,16 +241,15 @@ class WhatsAppService {
   }
 
   /// Send message with photo via share intent.
+  /// Note: Due to platform limitations, we can't pre-select WhatsApp or recipient.
+  /// User will need to choose WhatsApp and select recipient from share sheet.
   Future<bool> _sendWithPhoto(String phoneNumber, String message, String photoPath) async {
     try {
-      // Clean phone number
-      final cleanPhone = phoneNumber.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-
-      // Use whatsapp_share2 package
-      await WhatsappShare.shareFile(
+      // Use share_plus to share photo with message
+      // Note: Can't pre-select WhatsApp or recipient due to platform security
+      final result = await Share.shareXFiles(
+        [XFile(photoPath)],
         text: message,
-        phone: cleanPhone,
-        filePath: [photoPath],
       );
 
       // Clean up temp file after a delay
@@ -265,7 +264,8 @@ class WhatsAppService {
         }
       });
 
-      return true;
+      // Share was successful if user didn't dismiss
+      return result.status != ShareResultStatus.dismissed;
     } catch (e) {
       // debugPrint('Error sending WhatsApp with photo: $e');
 

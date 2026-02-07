@@ -81,14 +81,25 @@ The system supports flexible parsing of various formats.
 
 ### How It Works
 
+**Text-only messages:**
 1. User speaks command
 2. Assistant calls `send_whatsapp_message` tool
 3. Service looks up contact in memory
-4. Service finds photo if requested (via PhotoIndexService)
-5. Service opens WhatsApp with pre-filled message
-6. User taps "Send" in WhatsApp to confirm
+4. Service opens WhatsApp with pre-filled message to specific contact
+5. User taps "Send" in WhatsApp to confirm
 
-**Note:** WhatsApp security prevents fully automatic sending. The app opens WhatsApp with the message pre-filled, but the user must tap Send to confirm.
+**Messages with photos:**
+1. User speaks command with photo request
+2. Assistant calls `send_whatsapp_message` tool
+3. Service looks up contact in memory
+4. Service finds photo if requested (via PhotoIndexService)
+5. Service opens system share sheet with photo and message
+6. User selects WhatsApp from share sheet
+7. User selects recipient in WhatsApp and taps Send
+
+**Note:** Due to platform security restrictions:
+- Text-only messages can pre-select the recipient in WhatsApp
+- Messages with photos use the system share sheet and require manual recipient selection
 
 ## Technical Details
 
@@ -118,10 +129,10 @@ Leverages existing `PhotoIndexService`:
 ### WhatsApp Integration
 
 Uses two methods:
-1. **Text-only**: `whatsapp://send?phone=X&text=Y` URL scheme (fast, native)
-2. **With photo**: `whatsapp_share2` package using platform share intent
+1. **Text-only**: `whatsapp://send?phone=X&text=Y` URL scheme (fast, native, pre-selects recipient)
+2. **With photo**: `share_plus` package using system share sheet (user selects WhatsApp and recipient)
 
-Fallback to web link (`https://wa.me/`) if native app not found.
+Fallback to web link (`https://wa.me/`) if WhatsApp app not found.
 
 ## Testing
 
@@ -167,12 +178,12 @@ All 9 tests pass, covering:
 
 ## Dependencies
 
-- `whatsapp_share2: ^2.0.0` - Platform share intent for photo attachments
-- `url_launcher` (existing) - WhatsApp URL scheme handling
+- `share_plus: ^10.1.3` - System share sheet for photo attachments
+- `url_launcher` (existing) - WhatsApp URL scheme handling for text-only messages
 - `photo_manager` (existing) - Photo file access
 - `shared_preferences` (existing) - Not used in this feature
 
-No additional permissions required (WhatsApp URL scheme handled automatically).
+No additional permissions required (WhatsApp URL scheme and share sheet handled automatically by OS).
 
 ## Error Handling
 
