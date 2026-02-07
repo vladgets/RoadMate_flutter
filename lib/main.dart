@@ -555,11 +555,11 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   'search_photos': (args) async {
     return await PhotoIndexService.instance.toolSearchPhotos(args);
   },
-  // Voice memory tools
-  'save_voice_memory': (args) async {
+  // Voice note tools
+  'save_voice_note': (args) async {
     return await VoiceMemoryStore.instance.toolSaveMemory(args);
   },
-  'search_voice_memories': (args) async {
+  'search_voice_notes': (args) async {
     return await VoiceMemoryStore.instance.toolSearchMemories(args);
   },
 };

@@ -30,10 +30,11 @@ and only if not then ask user.
 
 Photos: You can search the user's photo album by location and time using the search_photos tool. When the user asks for photos (e.g., "show me photos from Paris" or "photos from last week"), use this tool to find matching photos and display them in the conversation. When presenting photo results, simply say you found the photos (e.g., "Here are your photos from last week") without mentioning file names or paths. The photos will display with date and location labels automatically.
 
-Voice Memories: There are two memory systems — use the right one:
-- "memory_append" is for short factual notes (e.g., "user likes jazz", "car is a Toyota Camry").
-- "save_voice_memory" is for stories, narratives, and descriptions of events or places (e.g., "I had an amazing dinner at that rooftop restaurant overlooking the bay"). Voice memories are saved with the user's current location and time automatically.
-Use "search_voice_memories" when the user asks about their saved stories or past experiences (e.g., "what did I say about that restaurant?" or "what memories do I have from last week?").
+Voice Notes: The "save_voice_note" and "search_voice_notes" tools are completely separate from the memory tools above.
+- "memory_append" / "memory_fetch" = short factual notes about the user (e.g., "user likes jazz", "car is a Toyota Camry"). Use these when the user says "remember that I…" followed by a short fact.
+- "save_voice_note" = longer stories, narratives, experiences, and descriptions of events or places (e.g., "I had an amazing dinner at that rooftop restaurant overlooking the bay"). Use this when the user tells you a story or describes an experience they want to keep. Location and time are captured automatically.
+- "search_voice_notes" = search saved voice notes by text, location, or time (e.g., "what did I note about that restaurant?" or "what notes do I have from last week?").
+IMPORTANT: Never use "memory_append" to save stories or narratives — use "save_voice_note" instead. Never use "save_voice_note" for short facts — use "memory_append" instead.
 
 Current date: {{CURRENT_DATE_READABLE}}
 ''';
@@ -383,17 +384,17 @@ $trimmedPrefs''';
         }
       }
     },
-    // Voice memory tools
+    // Voice note tools (separate from memory_append/memory_fetch)
     {
       "type": "function",
-      "name": "save_voice_memory",
-      "description": "Save a voice memory — a story, narrative, or description of an event or place the user wants to remember. Do NOT use this for short factual notes (use memory_append for those). The user's current location and time are captured automatically.",
+      "name": "save_voice_note",
+      "description": "Save a voice note — a story, narrative, or description of an event or place. Do NOT use this for short factual notes (use memory_append for those). Location and time are captured automatically.",
       "parameters": {
         "type": "object",
         "properties": {
           "text": {
             "type": "string",
-            "description": "The narrative or story text to save as a voice memory."
+            "description": "The narrative or story text to save as a voice note."
           }
         },
         "required": ["text"]
@@ -401,14 +402,14 @@ $trimmedPrefs''';
     },
     {
       "type": "function",
-      "name": "search_voice_memories",
-      "description": "Search the user's saved voice memories by text content, location, and/or time period.",
+      "name": "search_voice_notes",
+      "description": "Search the user's saved voice notes by text content, location, and/or time period.",
       "parameters": {
         "type": "object",
         "properties": {
           "text": {
             "type": "string",
-            "description": "Keywords to search for in memory content."
+            "description": "Keywords to search for in note content."
           },
           "location": {
             "type": "string",
@@ -420,7 +421,7 @@ $trimmedPrefs''';
           },
           "limit": {
             "type": "integer",
-            "description": "Maximum number of memories to return (default: 5)."
+            "description": "Maximum number of notes to return (default: 5)."
           }
         }
       }
