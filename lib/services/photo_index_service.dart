@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../models/photo_index.dart';
 import 'geo_time_tools.dart';
+import 'time_period_parser.dart';
 
 /// Service for indexing and searching the user's photo album
 class PhotoIndexService {
@@ -299,49 +300,13 @@ class PhotoIndexService {
       return [];
     }
 
-    final now = DateTime.now();
-    DateTime? startDate;
-    DateTime? endDate;
-
-    // Parse time period
-    final query = timePeriod.toLowerCase();
-
-    if (query.contains('today')) {
-      startDate = DateTime(now.year, now.month, now.day);
-      endDate = now;
-    } else if (query.contains('yesterday')) {
-      final yesterday = now.subtract(const Duration(days: 1));
-      startDate = DateTime(yesterday.year, yesterday.month, yesterday.day);
-      endDate = DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
-    } else if (query.contains('last week') || query.contains('past week')) {
-      startDate = now.subtract(const Duration(days: 7));
-      endDate = now;
-    } else if (query.contains('last month') || query.contains('past month')) {
-      startDate = now.subtract(const Duration(days: 30));
-      endDate = now;
-    } else if (query.contains('last year') || query.contains('past year')) {
-      startDate = now.subtract(const Duration(days: 365));
-      endDate = now;
-    } else {
-      // Try to parse specific month/year
-      // This is a simplified parser - could be enhanced
-      final yearMatch = RegExp(r'\b(20\d{2})\b').firstMatch(query);
-      if (yearMatch != null) {
-        final year = int.parse(yearMatch.group(1)!);
-        startDate = DateTime(year, 1, 1);
-        endDate = DateTime(year, 12, 31, 23, 59, 59);
-      }
-    }
-
-    if (startDate == null || endDate == null) {
-      // Couldn't parse time period
-      return [];
-    }
+    final range = TimePeriodParser.parse(timePeriod);
+    if (range == null) return [];
 
     return _index!.photos.where((photo) {
       if (photo.timestamp == null) return false;
-      return photo.timestamp!.isAfter(startDate!) &&
-             photo.timestamp!.isBefore(endDate!);
+      return photo.timestamp!.isAfter(range.start) &&
+             photo.timestamp!.isBefore(range.end);
     }).toList();
   }
 

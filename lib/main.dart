@@ -25,6 +25,8 @@ import 'services/reminders.dart';
 import 'services/youtube_client.dart';
 import 'services/conversation_store.dart';
 import 'services/photo_index_service.dart';
+import 'services/voice_memory_store.dart';
+import 'ui/voice_memories_screen.dart';
 // import 'firebase_messaging.dart';
 
 
@@ -44,6 +46,9 @@ Future<void> main() async {
 
   // Initialize photo index service
   await PhotoIndexService.instance.init();
+
+  // Initialize voice memory store
+  await VoiceMemoryStore.instance.init();
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -550,6 +555,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   'search_photos': (args) async {
     return await PhotoIndexService.instance.toolSearchPhotos(args);
   },
+  // Voice memory tools
+  'save_voice_memory': (args) async {
+    return await VoiceMemoryStore.instance.toolSaveMemory(args);
+  },
+  'search_voice_memories': (args) async {
+    return await VoiceMemoryStore.instance.toolSearchMemories(args);
+  },
 };
 
   /// Extracts tool name + arguments from an event, runs the handler,
@@ -699,6 +711,20 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
                       ),
                     );
                   },
+          ),
+          IconButton(
+            tooltip: 'Voice Memories',
+            icon: const Icon(Icons.auto_stories),
+            onPressed: () async {
+              if (_connected) {
+                await _disconnect();
+              }
+              if (!mounted) return;
+              // ignore: use_build_context_synchronously
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const VoiceMemoriesScreen()),
+              );
+            },
           ),
           IconButton(
             tooltip: 'Settings',

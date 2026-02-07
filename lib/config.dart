@@ -30,6 +30,11 @@ and only if not then ask user.
 
 Photos: You can search the user's photo album by location and time using the search_photos tool. When the user asks for photos (e.g., "show me photos from Paris" or "photos from last week"), use this tool to find matching photos and display them in the conversation. When presenting photo results, simply say you found the photos (e.g., "Here are your photos from last week") without mentioning file names or paths. The photos will display with date and location labels automatically.
 
+Voice Memories: There are two memory systems — use the right one:
+- "memory_append" is for short factual notes (e.g., "user likes jazz", "car is a Toyota Camry").
+- "save_voice_memory" is for stories, narratives, and descriptions of events or places (e.g., "I had an amazing dinner at that rooftop restaurant overlooking the bay"). Voice memories are saved with the user's current location and time automatically.
+Use "search_voice_memories" when the user asks about their saved stories or past experiences (e.g., "what did I say about that restaurant?" or "what memories do I have from last week?").
+
 Current date: {{CURRENT_DATE_READABLE}}
 ''';
 
@@ -374,6 +379,48 @@ $trimmedPrefs''';
           "limit": {
             "type": "integer",
             "description": "Maximum number of photos to return (default: 10)"
+          }
+        }
+      }
+    },
+    // Voice memory tools
+    {
+      "type": "function",
+      "name": "save_voice_memory",
+      "description": "Save a voice memory — a story, narrative, or description of an event or place the user wants to remember. Do NOT use this for short factual notes (use memory_append for those). The user's current location and time are captured automatically.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The narrative or story text to save as a voice memory."
+          }
+        },
+        "required": ["text"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "search_voice_memories",
+      "description": "Search the user's saved voice memories by text content, location, and/or time period.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Keywords to search for in memory content."
+          },
+          "location": {
+            "type": "string",
+            "description": "Location name or address to filter by."
+          },
+          "time_period": {
+            "type": "string",
+            "description": "Time period (e.g., 'today', 'last week', 'last month')."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of memories to return (default: 5)."
           }
         }
       }

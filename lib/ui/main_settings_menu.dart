@@ -3,6 +3,7 @@ import '../config.dart';
 import 'memory_settings_screen.dart';
 import 'extensions_settings_screen.dart';
 import 'reminders_screen.dart';
+import 'voice_memories_screen.dart';
 import 'developer_area_menu.dart';
 import 'onboarding_screen.dart';
 
@@ -141,9 +142,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('View upcoming reminders'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
-              // Reminders
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const RemindersScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.auto_stories),
+            title: const Text('Voice Memories'),
+            subtitle: const Text('Browse saved voice memories'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const VoiceMemoriesScreen()),
               );
             },
           ),
