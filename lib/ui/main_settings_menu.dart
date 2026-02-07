@@ -149,8 +149,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           ListTile(
             leading: const Icon(Icons.auto_stories),
-            title: const Text('Voice Memories'),
-            subtitle: const Text('Browse saved voice memories'),
+            title: const Text('Voice Notes'),
+            subtitle: const Text('Browse saved voice notes'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(context).push(

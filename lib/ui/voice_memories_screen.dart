@@ -75,8 +75,8 @@ class _VoiceMemoriesScreenState extends State<VoiceMemoriesScreen> {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Memory'),
-        content: const Text('Are you sure you want to delete this memory? This cannot be undone.'),
+        title: const Text('Delete Note'),
+        content: const Text('Are you sure you want to delete this note? This cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -186,13 +186,13 @@ class _VoiceMemoriesScreenState extends State<VoiceMemoriesScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('New Voice Memory'),
+        title: const Text('New Voice Note'),
         content: TextField(
           controller: textController,
           maxLines: 5,
           minLines: 3,
           decoration: const InputDecoration(
-            hintText: 'Write your memory...',
+            hintText: 'Write your note...',
             border: OutlineInputBorder(),
           ),
           autofocus: true,
@@ -263,7 +263,7 @@ class _VoiceMemoriesScreenState extends State<VoiceMemoriesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Voice Memories'),
+        title: const Text('Voice Notes'),
       ),
       body: Column(
         children: [
@@ -273,7 +273,7 @@ class _VoiceMemoriesScreenState extends State<VoiceMemoriesScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search memories...',
+                hintText: 'Search notes...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
@@ -307,8 +307,8 @@ class _VoiceMemoriesScreenState extends State<VoiceMemoriesScreen> {
                             const SizedBox(height: 16),
                             Text(
                               _searchController.text.isNotEmpty
-                                  ? 'No memories match your search'
-                                  : 'No voice memories yet',
+                                  ? 'No notes match your search'
+                                  : 'No voice notes yet',
                               style: TextStyle(
                                 fontSize: 16,
                                 color: Colors.grey.shade600,
@@ -317,7 +317,7 @@ class _VoiceMemoriesScreenState extends State<VoiceMemoriesScreen> {
                             if (_searchController.text.isEmpty) ...[
                               const SizedBox(height: 8),
                               Text(
-                                'Tell your assistant to save a memory,\nor tap + to add one manually.',
+                                'Tell your assistant to save a note,\nor tap + to add one manually.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 14,

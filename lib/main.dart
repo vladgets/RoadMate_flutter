@@ -184,6 +184,7 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
 
   bool _connecting = false;
   bool _connected = false;
+  bool _navigatedAway = false;
   String? _status;
   String? _error;
 
@@ -227,8 +228,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     }
 
     // When app returns to foreground, auto-start mic session if not connected.
+    // Don't reconnect if user navigated to another screen (chat, notes, etc.)
     if (state == AppLifecycleState.resumed) {
       if (!mounted) return;
+      if (_navigatedAway) return;
       if (_connected || _connecting) return;
       _connect();
     }
@@ -693,16 +696,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
             onPressed: _conversationStore == null
                 ? null
                 : () async {
-                    // Disconnect voice if active
-                    if (_connected) {
-                      await _disconnect();
-                    }
+                    _navigatedAway = true;
+                    await _disconnect();
 
-                    // Use mounted check before async navigation
                     if (!mounted) return;
 
                     // ignore: use_build_context_synchronously
-                    Navigator.of(context).push(
+                    await Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => ChatScreen(
                           conversationStore: _conversationStore!,
@@ -710,29 +710,35 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
                         ),
                       ),
                     );
+                    _navigatedAway = false;
                   },
           ),
           IconButton(
-            tooltip: 'Voice Memories',
+            tooltip: 'Voice Notes',
             icon: const Icon(Icons.auto_stories),
             onPressed: () async {
-              if (_connected) {
-                await _disconnect();
-              }
+              _navigatedAway = true;
+              await _disconnect();
               if (!mounted) return;
               // ignore: use_build_context_synchronously
-              Navigator.of(context).push(
+              await Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const VoiceMemoriesScreen()),
               );
+              _navigatedAway = false;
             },
           ),
           IconButton(
             tooltip: 'Settings',
             icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.of(context).push(
+            onPressed: () async {
+              _navigatedAway = true;
+              await _disconnect();
+              if (!mounted) return;
+              // ignore: use_build_context_synchronously
+              await Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const SettingsScreen()),
               );
+              _navigatedAway = false;
             },
           ),
         ],
