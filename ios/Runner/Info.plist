@@ -32,12 +32,18 @@
 	<string>RoadMate uses your location to provide navigation and nearby assistance.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>RoadMate needs microphone access for voice conversations.</string>
-	<key>NSUserNotificationUsageDescription</key>
-	<string>RoadMate sends reminders you create.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>RoadMate needs access to your photos to help you find and view them by location and time.</string>
+	<key>NSUserNotificationUsageDescription</key>
+	<string>RoadMate sends reminders you create.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+		<string>tel</string>
+		<string>maps</string>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

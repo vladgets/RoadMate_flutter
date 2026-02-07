@@ -32,6 +32,7 @@ dependencies:
   audio_session: ^0.2.2
   uuid: ^4.5.2
   photo_manager: ^3.8.3
+  whatsapp_share2: ^2.0.0
 
 dev_dependencies:
   flutter_test:

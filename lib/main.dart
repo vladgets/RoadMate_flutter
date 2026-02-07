@@ -26,6 +26,7 @@ import 'services/youtube_client.dart';
 import 'services/conversation_store.dart';
 import 'services/photo_index_service.dart';
 import 'services/voice_memory_store.dart';
+import 'services/whatsapp_service.dart';
 import 'ui/voice_memories_screen.dart';
 // import 'firebase_messaging.dart';
 
@@ -44,8 +45,9 @@ Future<void> main() async {
   // Initialize reminders service
   await RemindersService.instance.init();
 
-  // Initialize photo index service
+  // Initialize photo index service and start background indexing
   await PhotoIndexService.instance.init();
+  PhotoIndexService.instance.buildIndexInBackground();
 
   // Initialize voice memory store
   await VoiceMemoryStore.instance.init();
@@ -173,12 +175,19 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
      // disable for now
      // initFcm();
 
-    // Auto-start microphone session on app launch.
+    // Auto-start microphone session on app launch (if enabled in settings).
     // This will trigger the mic permission prompt (if not granted yet).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (_connected || _connecting) return;
-      _connect();
+
+      // Check if auto-start is enabled (default: false)
+      final prefs = await SharedPreferences.getInstance();
+      final autoStart = prefs.getBool('autoStartVoice') ?? false;
+
+      if (autoStart) {
+        _connect();
+      }
     });
   }
 
@@ -233,7 +242,14 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
       if (!mounted) return;
       if (_navigatedAway) return;
       if (_connected || _connecting) return;
-      _connect();
+
+      // Check if auto-start is enabled
+      SharedPreferences.getInstance().then((prefs) {
+        final autoStart = prefs.getBool('autoStartVoice') ?? false;
+        if (autoStart && mounted && !_connected && !_connecting) {
+          _connect();
+        }
+      });
     }
   }
 
@@ -565,6 +581,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   'search_voice_notes': (args) async {
     return await VoiceMemoryStore.instance.toolSearchMemories(args);
   },
+  // WhatsApp tool
+  'send_whatsapp_message': (args) async {
+    return await WhatsAppService.instance.toolSendWhatsAppMessage(args);
+  },
 };
 
   /// Extracts tool name + arguments from an event, runs the handler,
@@ -689,30 +709,30 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
         backgroundColor: Colors.black,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            tooltip: 'Chat',
-            icon: const Icon(Icons.chat_bubble_outline),
-            onPressed: _conversationStore == null
-                ? null
-                : () async {
-                    _navigatedAway = true;
-                    await _disconnect();
+        leading: IconButton(
+          tooltip: 'Chat',
+          icon: const Icon(Icons.chat_bubble_outline),
+          onPressed: _conversationStore == null
+              ? null
+              : () async {
+                  _navigatedAway = true;
+                  await _disconnect();
 
-                    if (!mounted) return;
+                  if (!mounted) return;
 
-                    // ignore: use_build_context_synchronously
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                          conversationStore: _conversationStore!,
-                          toolExecutor: executeTool,
-                        ),
+                  // ignore: use_build_context_synchronously
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ChatScreen(
+                        conversationStore: _conversationStore!,
+                        toolExecutor: executeTool,
                       ),
-                    );
-                    _navigatedAway = false;
-                  },
-          ),
+                    ),
+                  );
+                  _navigatedAway = false;
+                },
+        ),
+        actions: [
           IconButton(
             tooltip: 'Voice Notes',
             icon: const Icon(Icons.auto_stories),

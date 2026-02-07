@@ -35,6 +35,8 @@ Voice Notes: The "save_voice_note" and "search_voice_notes" tools are completely
 - "save_voice_note" = longer stories, narratives, experiences, and descriptions of events or places (e.g., "I had an amazing dinner at that rooftop restaurant overlooking the bay"). Use this when the user tells you a story or describes an experience they want to keep. Location and time are captured automatically.
 - "search_voice_notes" = search saved voice notes by text, location, or time (e.g., "what did I note about that restaurant?" or "what notes do I have from last week?").
 
+WhatsApp Messages: Use "send_whatsapp_message" to send text messages (and optionally photos) to contacts via WhatsApp. The contact must be saved in memory first (e.g., "remember mom's WhatsApp is +1234567890"). Photos can be included by specifying location and/or time. WhatsApp will open with the message pre-filled; the user must tap Send to confirm.
+
 Current date: {{CURRENT_DATE_READABLE}}
 ''';
 
@@ -423,6 +425,37 @@ $trimmedPrefs''';
             "description": "Maximum number of notes to return (default: 5)."
           }
         }
+      }
+    },
+    {
+      "type": "function",
+      "name": "send_whatsapp_message",
+      "description": "Send a message to a WhatsApp contact saved in memory. Optionally include a photo from the album.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "contact_name": {
+            "type": "string",
+            "description": "Name of the contact (will be looked up in memory)"
+          },
+          "message": {
+            "type": "string",
+            "description": "Text message to send"
+          },
+          "photo_location": {
+            "type": "string",
+            "description": "Optional: location to find photo (e.g., 'Paris', 'home')"
+          },
+          "photo_time": {
+            "type": "string",
+            "description": "Optional: time period (e.g., 'yesterday', 'last week')"
+          },
+          "include_sender_name": {
+            "type": "boolean",
+            "description": "If true, prepend 'From [Your Name]:' to message"
+          }
+        },
+        "required": ["contact_name", "message"]
       }
     }
   ];
