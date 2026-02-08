@@ -251,7 +251,6 @@ class _CollagePainterImpl extends CustomPainter {
       return Colors.blue; // Fallback color
     }
   }
-  }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
