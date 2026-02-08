@@ -167,11 +167,12 @@ function analyzeMood(memories) {
 }
 
 function suggestColorPalette(theme, photos) {
+  // Use muted, pastel-like colors that won't distract from photos
   const palettes = {
-    beach: ['#FF6B6B', '#4ECDC4', '#FFE66D'], // Coral, turquoise, sandy beige
-    mountain: ['#2D5F3F', '#E67E22', '#3498DB'], // Forest green, autumn orange, sky blue
-    urban: ['#2C3E50', '#9B59B6', '#F39C12'], // Deep navy, neon purple, gold
-    nature: ['#27AE60', '#F1C40F', '#3498DB'], // Green, yellow, blue
+    beach: ['#D4E7E5', '#F0E5D8', '#C8D8E4'], // Soft sea foam, warm sand, pale sky
+    mountain: ['#E8EAE6', '#D9CAB3', '#B8C5D6'], // Soft sage, muted taupe, gentle blue-gray
+    urban: ['#D6D4D3', '#E0D4D1', '#C9CBCF'], // Warm gray, dusty rose, cool gray
+    nature: ['#E5E8D4', '#D8E4D8', '#E6E2D6'], // Pale green, soft mint, warm beige
   };
 
   return palettes[theme] || palettes.nature;
@@ -195,27 +196,8 @@ function getSeasonFromPhotos(photos) {
 }
 
 function buildPrompt(theme, mood, colors, season, style) {
-  const themeDescriptions = {
-    beach: 'ocean-inspired',
-    mountain: 'mountain landscape',
-    urban: 'urban geometric',
-    nature: 'natural landscape',
-  };
+  // Make colors more muted and subtle
+  const mutedColors = colors.map(c => `soft ${c}`).join(', ');
 
-  const styleDescriptions = {
-    scrapbook: 'minimalist',
-    magazine: 'clean modern',
-    minimal: 'ultra minimal',
-  };
-
-  const moodDescriptions = {
-    joyful: 'vibrant',
-    peaceful: 'serene',
-    adventurous: 'dynamic',
-    nostalgic: 'warm',
-  };
-
-  const colorStr = colors.join(', ');
-
-  return `Minimalist abstract ${themeDescriptions[theme]} background with ${colorStr} color scheme, ${styleDescriptions[style || 'scrapbook']} aesthetic, clean simple design, subtle gradients, no complex textures, no photos, no text, no people, no objects, 1024x1792 portrait orientation, ${moodDescriptions[mood]} mood`;
+  return `Abstract watercolor wash background with ${mutedColors} color scheme, very subtle and muted tones, soft color blending, organic flowing gradients, low saturation, pastel-like, gentle color transitions, no objects, no mountains, no trees, no buildings, no landscapes, no recognizable shapes, just soft color washes, minimal contrast, very subtle background so photos remain the focus, 1024x1792 portrait orientation`;
 }
