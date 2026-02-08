@@ -1,5 +1,4 @@
 import express from 'express';
-import OpenAI from 'openai';
 
 const router = express.Router();
 
@@ -7,9 +6,7 @@ export function registerCollageRoutes(app) {
   app.use('/collage', router);
 }
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 router.post('/generate-background', async (req, res) => {
   try {
@@ -43,16 +40,29 @@ router.post('/generate-background', async (req, res) => {
 
     console.log('[Collage] Generating background with prompt:', prompt);
 
-    // 3. Call DALL-E 3
-    const response = await openai.images.generate({
-      model: "dall-e-3",
-      prompt: prompt,
-      n: 1,
-      size: "1024x1792",
-      quality: "standard", // or "hd" for $0.080
+    // 3. Call DALL-E 3 using fetch
+    const response = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "dall-e-3",
+        prompt: prompt,
+        n: 1,
+        size: "1024x1792",
+        quality: "standard", // or "hd" for $0.080
+      }),
     });
 
-    const backgroundUrl = response.data[0].url;
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'DALL-E API error');
+    }
+
+    const data = await response.json();
+    const backgroundUrl = data.data[0].url;
 
     console.log('[Collage] Background generated successfully');
 
