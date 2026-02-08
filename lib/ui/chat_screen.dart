@@ -10,6 +10,7 @@ import '../services/openai_chat_client.dart';
 import '../services/photo_capture_service.dart';
 import 'main_settings_menu.dart';
 import 'voice_memories_screen.dart';
+import 'collage/photo_selection_screen.dart';
 import 'widgets/session_list_drawer.dart';
 import 'widgets/photo_viewer.dart';
 
@@ -301,6 +302,17 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.photo_library),
+            tooltip: 'Create Photo Collage',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const PhotoSelectionScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.auto_stories),
             tooltip: 'Voice Notes',

@@ -587,4 +587,12 @@ class PhotoIndexService {
       // Fail silently - indexing is not critical
     }
   }
+
+  /// Get all photos from the index (for collage feature)
+  Future<List<PhotoMetadata>> getAllPhotos() async {
+    if (_index == null) {
+      await init();
+    }
+    return _index?.photos ?? [];
+  }
 }

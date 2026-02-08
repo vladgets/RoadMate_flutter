@@ -3,6 +3,7 @@ import { registerGmailRoutes } from "./gmail.js";
 import { registerGoogleMapsRoutes } from "./google_maps.js";
 import { registerUserLocationRoutes } from "./user_location.js";
 import { registerYouTubeRoutes } from "./youtube.js";
+import { registerCollageRoutes } from "./collage.js";
 import admin from "firebase-admin";
 
 const app = express();
@@ -19,6 +20,7 @@ registerGmailRoutes(app);
 registerGoogleMapsRoutes(app);
 registerUserLocationRoutes(app);
 registerYouTubeRoutes(app);
+registerCollageRoutes(app);
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
