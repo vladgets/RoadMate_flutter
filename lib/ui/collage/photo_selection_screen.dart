@@ -25,6 +25,15 @@ class _PhotoSelectionScreenState extends State<PhotoSelectionScreen> {
 
   Future<void> _loadPhotos() async {
     final photos = await PhotoIndexService.instance.getAllPhotos();
+
+    // Sort by timestamp (newest first)
+    photos.sort((a, b) {
+      if (a.timestamp == null && b.timestamp == null) return 0;
+      if (a.timestamp == null) return 1; // Put photos without dates at the end
+      if (b.timestamp == null) return -1;
+      return b.timestamp!.compareTo(a.timestamp!); // Descending order (newest first)
+    });
+
     setState(() {
       _allPhotos = photos;
       _isLoading = false;
