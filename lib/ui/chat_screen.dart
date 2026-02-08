@@ -7,6 +7,7 @@ import '../models/photo_attachment.dart';
 import '../services/conversation_store.dart';
 import '../services/openai_chat_client.dart';
 import 'main_settings_menu.dart';
+import 'voice_memories_screen.dart';
 import 'widgets/session_list_drawer.dart';
 import 'widgets/photo_viewer.dart';
 
@@ -167,6 +168,17 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.mic_none),
+            tooltip: 'Voice Notes',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const VoiceMemoriesScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             tooltip: 'Settings',
