@@ -228,9 +228,9 @@ class CollageComposer {
 
     if (count >= 1) {
       slots.add(CollageTextSlot(
-        position: const Offset(0.1, 0.88),
-        maxWidth: 0.8,
-        fontSize: 14,
+        position: const Offset(0.05, 0.85),
+        maxWidth: 0.9,
+        fontSize: 20,
         color: Colors.white,
         style: style == 'scrapbook' ? 'handwritten' : 'modern',
       ));

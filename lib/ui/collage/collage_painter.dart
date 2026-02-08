@@ -172,16 +172,24 @@ class _CollagePainterImpl extends CustomPainter {
 
       final textPainter = TextPainter(
         text: TextSpan(
-          text: memory.transcription.length > 100
-              ? '${memory.transcription.substring(0, 100)}...'
+          text: memory.transcription.length > 120
+              ? '${memory.transcription.substring(0, 120)}...'
               : memory.transcription,
           style: TextStyle(
             color: slot.color,
             fontSize: slot.fontSize,
-            fontFamily: slot.style == 'handwritten' ? 'Courier' : 'Arial',
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+            height: 1.4,
+            fontFamily: slot.style == 'handwritten' ? 'Courier' : null,
             shadows: [
               Shadow(
-                color: Colors.black.withValues(alpha: 0.5),
+                color: Colors.black.withValues(alpha: 0.8),
+                offset: const Offset(2, 2),
+                blurRadius: 4,
+              ),
+              Shadow(
+                color: Colors.black.withValues(alpha: 0.4),
                 offset: const Offset(1, 1),
                 blurRadius: 2,
               ),
@@ -189,13 +197,63 @@ class _CollagePainterImpl extends CustomPainter {
           ),
         ),
         textDirection: TextDirection.ltr,
-        maxLines: 3,
+        maxLines: 4,
       );
 
       textPainter.layout(maxWidth: slot.maxWidth * size.width);
+
+      final textX = slot.position.dx * size.width;
+      final textY = slot.position.dy * size.height;
+
+      // Draw semi-transparent background box
+      final padding = 16.0;
+      final backgroundRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          textX - padding,
+          textY - padding,
+          textPainter.width + padding * 2,
+          textPainter.height + padding * 2,
+        ),
+        const Radius.circular(12),
+      );
+
+      // Draw shadow behind background box
+      canvas.drawRRect(
+        backgroundRect,
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.3)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      );
+
+      // Draw background box with gradient
+      final gradient = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.black.withValues(alpha: 0.65),
+          Colors.black.withValues(alpha: 0.75),
+        ],
+      );
+
+      canvas.drawRRect(
+        backgroundRect,
+        Paint()
+          ..shader = gradient.createShader(backgroundRect.outerRect),
+      );
+
+      // Draw decorative border
+      canvas.drawRRect(
+        backgroundRect,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.15)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
+      );
+
+      // Paint the text
       textPainter.paint(
         canvas,
-        Offset(slot.position.dx * size.width, slot.position.dy * size.height),
+        Offset(textX, textY),
       );
     }
   }
