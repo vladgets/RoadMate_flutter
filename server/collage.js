@@ -198,24 +198,24 @@ function buildPrompt(theme, mood, colors, season, style) {
   const themeDescriptions = {
     beach: 'ocean-inspired',
     mountain: 'mountain landscape',
-    urban: 'urban night',
+    urban: 'urban geometric',
     nature: 'natural landscape',
   };
 
   const styleDescriptions = {
-    scrapbook: 'watercolor',
-    magazine: 'modern gradient',
-    minimal: 'minimalist geometric',
+    scrapbook: 'minimalist',
+    magazine: 'clean modern',
+    minimal: 'ultra minimal',
   };
 
   const moodDescriptions = {
-    joyful: 'vibrant energetic',
-    peaceful: 'peaceful serene',
-    adventurous: 'adventurous dynamic',
-    nostalgic: 'warm nostalgic',
+    joyful: 'vibrant',
+    peaceful: 'serene',
+    adventurous: 'dynamic',
+    nostalgic: 'warm',
   };
 
   const colorStr = colors.join(', ');
 
-  return `Abstract ${themeDescriptions[theme]} background with ${colorStr} color scheme, ${styleDescriptions[style || 'scrapbook']} aesthetic, suitable for photo collage overlay, soft gradients and textures, no photos, no text, no people, 1024x1792 portrait orientation, ${moodDescriptions[mood]} atmosphere`;
+  return `Minimalist abstract ${themeDescriptions[theme]} background with ${colorStr} color scheme, ${styleDescriptions[style || 'scrapbook']} aesthetic, clean simple design, subtle gradients, no complex textures, no photos, no text, no people, no objects, 1024x1792 portrait orientation, ${moodDescriptions[mood]} mood`;
 }

@@ -79,73 +79,117 @@ class CollageComposer {
   }
 
   List<CollagePhotoSlot> _scrapbookLayout(int count) {
-    // Positions normalized 0-1 (will scale to canvas size)
+    // Non-overlapping layout with slight rotation for visual interest
     final slots = <CollagePhotoSlot>[];
 
     if (count == 2) {
       slots.add(CollagePhotoSlot(
-        position: const Offset(0.15, 0.15),
-        size: const Size(0.6, 0.35),
-        rotation: -0.05, // -3 degrees
+        position: const Offset(0.1, 0.12),
+        size: const Size(0.8, 0.35),
+        rotation: -0.02, // -1 degree
       ));
       slots.add(CollagePhotoSlot(
-        position: const Offset(0.25, 0.55),
-        size: const Size(0.55, 0.35),
-        rotation: 0.08, // 5 degrees
+        position: const Offset(0.1, 0.52),
+        size: const Size(0.8, 0.35),
+        rotation: 0.02, // 1 degree
       ));
     } else if (count == 3) {
       slots.add(CollagePhotoSlot(
-        position: const Offset(0.1, 0.1),
-        size: const Size(0.5, 0.3),
-        rotation: -0.04,
+        position: const Offset(0.05, 0.08),
+        size: const Size(0.9, 0.26),
+        rotation: -0.015,
       ));
       slots.add(CollagePhotoSlot(
-        position: const Offset(0.5, 0.15),
-        size: const Size(0.4, 0.25),
-        rotation: 0.06,
+        position: const Offset(0.05, 0.37),
+        size: const Size(0.9, 0.26),
+        rotation: 0.01,
       ));
       slots.add(CollagePhotoSlot(
-        position: const Offset(0.2, 0.5),
-        size: const Size(0.6, 0.35),
-        rotation: -0.02,
+        position: const Offset(0.05, 0.66),
+        size: const Size(0.9, 0.26),
+        rotation: -0.01,
       ));
-    } else if (count >= 4) {
-      // 4-6 photos
+    } else if (count == 4) {
+      // 2x2 grid with slight rotation
       slots.add(CollagePhotoSlot(
-        position: const Offset(0.1, 0.08),
-        size: const Size(0.4, 0.25),
-        rotation: -0.05,
-      ));
-      slots.add(CollagePhotoSlot(
-        position: const Offset(0.55, 0.12),
-        size: const Size(0.35, 0.22),
-        rotation: 0.07,
+        position: const Offset(0.05, 0.08),
+        size: const Size(0.42, 0.36),
+        rotation: -0.015,
       ));
       slots.add(CollagePhotoSlot(
-        position: const Offset(0.05, 0.38),
-        size: const Size(0.45, 0.28),
-        rotation: 0.03,
+        position: const Offset(0.53, 0.08),
+        size: const Size(0.42, 0.36),
+        rotation: 0.015,
       ));
       slots.add(CollagePhotoSlot(
-        position: const Offset(0.52, 0.42),
-        size: const Size(0.38, 0.24),
-        rotation: -0.04,
+        position: const Offset(0.05, 0.48),
+        size: const Size(0.42, 0.36),
+        rotation: 0.01,
       ));
-
-      if (count >= 5) {
-        slots.add(CollagePhotoSlot(
-          position: const Offset(0.15, 0.72),
-          size: const Size(0.35, 0.2),
-          rotation: 0.05,
-        ));
-      }
-      if (count >= 6) {
-        slots.add(CollagePhotoSlot(
-          position: const Offset(0.55, 0.70),
-          size: const Size(0.3, 0.18),
-          rotation: -0.03,
-        ));
-      }
+      slots.add(CollagePhotoSlot(
+        position: const Offset(0.53, 0.48),
+        size: const Size(0.42, 0.36),
+        rotation: -0.01,
+      ));
+    } else if (count == 5) {
+      // 2 + 3 layout
+      slots.add(CollagePhotoSlot(
+        position: const Offset(0.05, 0.08),
+        size: const Size(0.42, 0.28),
+        rotation: -0.015,
+      ));
+      slots.add(CollagePhotoSlot(
+        position: const Offset(0.53, 0.08),
+        size: const Size(0.42, 0.28),
+        rotation: 0.015,
+      ));
+      slots.add(CollagePhotoSlot(
+        position: const Offset(0.05, 0.40),
+        size: const Size(0.28, 0.22),
+        rotation: 0.01,
+      ));
+      slots.add(CollagePhotoSlot(
+        position: const Offset(0.36, 0.40),
+        size: const Size(0.28, 0.22),
+        rotation: -0.01,
+      ));
+      slots.add(CollagePhotoSlot(
+        position: const Offset(0.67, 0.40),
+        size: const Size(0.28, 0.22),
+        rotation: 0.01,
+      ));
+    } else if (count >= 6) {
+      // 3x2 grid
+      slots.add(CollagePhotoSlot(
+        position: const Offset(0.05, 0.08),
+        size: const Size(0.28, 0.26),
+        rotation: -0.01,
+      ));
+      slots.add(CollagePhotoSlot(
+        position: const Offset(0.36, 0.08),
+        size: const Size(0.28, 0.26),
+        rotation: 0.01,
+      ));
+      slots.add(CollagePhotoSlot(
+        position: const Offset(0.67, 0.08),
+        size: const Size(0.28, 0.26),
+        rotation: -0.01,
+      ));
+      slots.add(CollagePhotoSlot(
+        position: const Offset(0.05, 0.37),
+        size: const Size(0.28, 0.26),
+        rotation: 0.01,
+      ));
+      slots.add(CollagePhotoSlot(
+        position: const Offset(0.36, 0.37),
+        size: const Size(0.28, 0.26),
+        rotation: -0.01,
+      ));
+      slots.add(CollagePhotoSlot(
+        position: const Offset(0.67, 0.37),
+        size: const Size(0.28, 0.26),
+        rotation: 0.01,
+      ));
     }
 
     return slots;
