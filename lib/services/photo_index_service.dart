@@ -538,4 +538,53 @@ class PhotoIndexService {
     // Future enhancement: incremental updates
     return await buildIndex(forceRebuild: true);
   }
+
+  /// Add a single photo to the index incrementally
+  Future<void> addPhotoToIndex(PhotoMetadata photo) async {
+    try {
+      // Load existing index if not loaded
+      if (_index == null) {
+        await _loadIndex();
+      }
+
+      // If still null, initialize empty
+      _index ??= PhotoIndex.empty();
+
+      // Check if photo already exists in index
+      final exists = _index!.photos.any((p) => p.id == photo.id);
+      if (exists) {
+        return; // Photo already indexed
+      }
+
+      // Add photo to index
+      final updatedPhotos = List<PhotoMetadata>.from(_index!.photos);
+      updatedPhotos.add(photo);
+
+      // Apply storage limit (keep most recent 20,000 photos)
+      if (updatedPhotos.length > _maxPhotosToIndex) {
+        // Sort by timestamp (newest first)
+        updatedPhotos.sort((a, b) {
+          if (a.timestamp == null && b.timestamp == null) return 0;
+          if (a.timestamp == null) return 1;
+          if (b.timestamp == null) return -1;
+          return b.timestamp!.compareTo(a.timestamp!);
+        });
+
+        // Keep only the most recent photos
+        updatedPhotos.removeRange(_maxPhotosToIndex, updatedPhotos.length);
+      }
+
+      // Update index
+      _index = PhotoIndex(
+        photos: updatedPhotos,
+        lastIndexed: DateTime.now(),
+        totalPhotos: _index!.totalPhotos + 1,
+      );
+
+      // Save to SharedPreferences
+      await _saveIndex();
+    } catch (e) {
+      // Fail silently - indexing is not critical
+    }
+  }
 }

@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'dart:typed_data';
+import 'dart:io';
 import '../models/chat_message.dart';
 import '../models/photo_attachment.dart';
 import '../services/conversation_store.dart';
 import '../services/openai_chat_client.dart';
+import '../services/photo_capture_service.dart';
 import 'main_settings_menu.dart';
 import 'voice_memories_screen.dart';
 import 'widgets/session_list_drawer.dart';
@@ -31,6 +33,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   late final OpenAIChatClient _chatClient;
+  List<PhotoAttachment> _attachedPhotos = [];
 
   @override
   void initState() {
@@ -52,22 +55,40 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendMessage() async {
     final text = _textController.text.trim();
-    if (text.isEmpty || _isLoading) return;
+    final hasPhotos = _attachedPhotos.isNotEmpty;
+
+    // Require either text or photos
+    if ((text.isEmpty && !hasPhotos) || _isLoading) return;
 
     // Clear input
     _textController.clear();
+    final photos = List<PhotoAttachment>.from(_attachedPhotos);
+    setState(() {
+      _attachedPhotos = []; // Clear preview
+    });
 
-    // Add user message
-    final userMessage = ChatMessage.userText(text);
+    // Add user message (with photos if attached)
+    final userMessage = hasPhotos
+        ? ChatMessage.userWithPhotos(text.isEmpty ? '📷' : text, photos)
+        : ChatMessage.userText(text);
     await widget.conversationStore.addMessageToActiveSession(userMessage);
+
+    // Scroll to bottom
+    _scrollToBottom();
+
+    // If there's no text (only photos), don't call the API
+    // Just add the message locally and return
+    if (text.isEmpty) {
+      setState(() {
+        // Trigger rebuild to show the new message
+      });
+      return;
+    }
 
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
-
-    // Scroll to bottom
-    _scrollToBottom();
 
     try {
       // Get response from API
@@ -137,6 +158,118 @@ class _ChatScreenState extends State<ChatScreen> {
   void _openVoiceMode() {
     // Pop back to Voice Mode
     Navigator.pop(context);
+  }
+
+  void _showPhotoOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Take Photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _takePhoto();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Select from Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickFromGallery();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _takePhoto() async {
+    final photos = await PhotoCaptureService.instance.takePhoto();
+    if (photos != null && photos.isNotEmpty) {
+      setState(() {
+        _attachedPhotos.addAll(photos);
+        // Limit to 10 photos
+        if (_attachedPhotos.length > 10) {
+          _attachedPhotos = _attachedPhotos.sublist(_attachedPhotos.length - 10);
+        }
+      });
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    final photos = await PhotoCaptureService.instance.pickFromGallery();
+    if (photos != null && photos.isNotEmpty) {
+      setState(() {
+        _attachedPhotos.addAll(photos);
+        // Limit to 10 photos
+        if (_attachedPhotos.length > 10) {
+          _attachedPhotos = _attachedPhotos.sublist(_attachedPhotos.length - 10);
+        }
+      });
+    }
+  }
+
+  void _removePhoto(int index) {
+    setState(() {
+      _attachedPhotos.removeAt(index);
+    });
+  }
+
+  Widget _buildPhotoPreviewRow() {
+    return Container(
+      height: 80,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: _attachedPhotos.length,
+        itemBuilder: (context, index) {
+          final photo = _attachedPhotos[index];
+          return Container(
+            width: 64,
+            height: 64,
+            margin: const EdgeInsets.only(right: 8),
+            child: Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: _PhotoThumbnailWidget(
+                    assetId: photo.id,
+                    filePath: photo.path,
+                    size: 64,
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: () => _removePhoto(index),
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -305,33 +438,50 @@ class _ChatScreenState extends State<ChatScreen> {
                 top: BorderSide(color: Colors.grey.shade300),
               ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _textController,
-                    decoration: const InputDecoration(
-                      hintText: 'Type message...',
-                      border: InputBorder.none,
-                    ),
-                    maxLines: null,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _sendMessage(),
-                    enabled: !_isLoading,
+                // Photo preview row (if photos attached)
+                if (_attachedPhotos.isNotEmpty) _buildPhotoPreviewRow(),
+
+                // Input row
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline),
+                        onPressed: _isLoading ? null : _showPhotoOptions,
+                        color: Colors.blue,
+                        tooltip: 'Add photo',
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _textController,
+                          decoration: const InputDecoration(
+                            hintText: 'Type message...',
+                            border: InputBorder.none,
+                          ),
+                          maxLines: null,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _sendMessage(),
+                          enabled: !_isLoading,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.mic),
+                        onPressed: _openVoiceMode,
+                        color: Colors.blue,
+                        tooltip: 'Open voice mode',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.send),
+                        onPressed: _sendMessage,
+                        color: Colors.blue,
+                        disabledColor: Colors.grey.shade400,
+                      ),
+                    ],
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.mic),
-                  onPressed: _openVoiceMode,
-                  color: Colors.blue,
-                  tooltip: 'Open voice mode',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.send),
-                  onPressed: _sendMessage,
-                  color: Colors.blue,
-                  disabledColor: Colors.grey.shade400,
                 ),
               ],
             ),
@@ -456,6 +606,7 @@ class _ChatScreenState extends State<ChatScreen> {
             },
             child: _PhotoThumbnailWidget(
               assetId: photo.id,
+              filePath: photo.path,
               size: 140,
             ),
           ),
@@ -489,13 +640,15 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-/// Widget for displaying photo thumbnails using asset ID
+/// Widget for displaying photo thumbnails using asset ID or file path
 class _PhotoThumbnailWidget extends StatefulWidget {
   final String assetId;
+  final String? filePath;
   final double size;
 
   const _PhotoThumbnailWidget({
     required this.assetId,
+    this.filePath,
     this.size = 120,
   });
 
@@ -516,24 +669,43 @@ class _PhotoThumbnailWidgetState extends State<_PhotoThumbnailWidget> {
 
   Future<void> _loadThumbnail() async {
     try {
+      // Try to load as AssetEntity first
       final asset = await AssetEntity.fromId(widget.assetId);
-      if (asset == null) {
+
+      if (asset != null) {
+        // Successfully loaded from AssetEntity
+        final thumbnailData = await asset.thumbnailDataWithSize(
+          const ThumbnailSize(200, 200),
+        );
+
         if (mounted) {
           setState(() {
-            _hasError = true;
+            _thumbnailData = thumbnailData;
             _isLoading = false;
           });
         }
         return;
       }
 
-      final thumbnailData = await asset.thumbnailDataWithSize(
-        const ThumbnailSize(200, 200),
-      );
+      // Asset not found - try to load from file path if provided
+      if (widget.filePath != null) {
+        final file = File(widget.filePath!);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          if (mounted) {
+            setState(() {
+              _thumbnailData = bytes;
+              _isLoading = false;
+            });
+          }
+          return;
+        }
+      }
 
+      // Neither asset nor file path worked
       if (mounted) {
         setState(() {
-          _thumbnailData = thumbnailData;
+          _hasError = true;
           _isLoading = false;
         });
       }

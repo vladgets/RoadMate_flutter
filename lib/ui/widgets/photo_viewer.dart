@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'dart:typed_data';
+import 'dart:io';
 import '../../models/photo_attachment.dart';
 
 /// Full-screen photo viewer with swipe navigation
@@ -57,7 +58,10 @@ class _PhotoViewerState extends State<PhotoViewer> {
                 child: InteractiveViewer(
                   minScale: 0.5,
                   maxScale: 4.0,
-                  child: _FullSizePhotoWidget(assetId: photo.id),
+                  child: _FullSizePhotoWidget(
+                    assetId: photo.id,
+                    filePath: photo.path,
+                  ),
                 ),
               );
             },
@@ -168,11 +172,15 @@ class _PhotoViewerState extends State<PhotoViewer> {
   }
 }
 
-/// Widget for displaying full-size photos using asset ID
+/// Widget for displaying full-size photos using asset ID or file path
 class _FullSizePhotoWidget extends StatefulWidget {
   final String assetId;
+  final String filePath;
 
-  const _FullSizePhotoWidget({required this.assetId});
+  const _FullSizePhotoWidget({
+    required this.assetId,
+    required this.filePath,
+  });
 
   @override
   State<_FullSizePhotoWidget> createState() => _FullSizePhotoWidgetState();
@@ -191,34 +199,41 @@ class _FullSizePhotoWidgetState extends State<_FullSizePhotoWidget> {
 
   Future<void> _loadImage() async {
     try {
+      // Try to load as AssetEntity first
       final asset = await AssetEntity.fromId(widget.assetId);
-      if (asset == null) {
+
+      if (asset != null) {
+        // Successfully loaded from AssetEntity
+        final file = await asset.file;
+        if (file != null) {
+          final imageData = await file.readAsBytes();
+          if (mounted) {
+            setState(() {
+              _imageData = imageData;
+              _isLoading = false;
+            });
+          }
+          return;
+        }
+      }
+
+      // Asset not found - try to load from file path
+      final file = File(widget.filePath);
+      if (await file.exists()) {
+        final imageData = await file.readAsBytes();
         if (mounted) {
           setState(() {
-            _hasError = true;
+            _imageData = imageData;
             _isLoading = false;
           });
         }
         return;
       }
 
-      // Load original size image
-      final file = await asset.file;
-      if (file == null) {
-        if (mounted) {
-          setState(() {
-            _hasError = true;
-            _isLoading = false;
-          });
-        }
-        return;
-      }
-
-      final imageData = await file.readAsBytes();
-
+      // Neither asset nor file path worked
       if (mounted) {
         setState(() {
-          _imageData = imageData;
+          _hasError = true;
           _isLoading = false;
         });
       }

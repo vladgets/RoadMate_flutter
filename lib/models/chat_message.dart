@@ -56,6 +56,19 @@ class ChatMessage {
     );
   }
 
+  /// Create a user message with photo attachments
+  factory ChatMessage.userWithPhotos(String content, List<PhotoAttachment> photos) {
+    return ChatMessage(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      role: 'user',
+      content: content,
+      timestamp: DateTime.now(),
+      type: 'text_with_images',
+      status: 'sent',
+      photos: photos,
+    );
+  }
+
   /// Create an assistant message with photo attachments
   factory ChatMessage.assistantWithPhotos(String content, List<PhotoAttachment> photos) {
     return ChatMessage(

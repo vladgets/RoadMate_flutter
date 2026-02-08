@@ -20,7 +20,14 @@
       "Bash(flutter build apk:*)",
       "Bash(tee:*)",
       "Bash(adb:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(pod install:*)",
+      "Bash(git checkout:*)",
+      "Bash(git reset:*)",
+      "Bash(grep:*)",
+      "Bash(flutter build:*)",
+      "Bash(flutter test:*)",
+      "Bash(flutter pub:*)"
     ]
   }
 }

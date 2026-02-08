@@ -710,42 +710,42 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         leading: IconButton(
-          tooltip: 'Chat',
-          icon: const Icon(Icons.chat_bubble_outline),
-          onPressed: _conversationStore == null
-              ? null
-              : () async {
-                  _navigatedAway = true;
-                  await _disconnect();
-
-                  if (!mounted) return;
-
-                  // ignore: use_build_context_synchronously
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ChatScreen(
-                        conversationStore: _conversationStore!,
-                        toolExecutor: executeTool,
-                      ),
-                    ),
-                  );
-                  _navigatedAway = false;
-                },
+          tooltip: 'Voice Notes',
+          icon: const Icon(Icons.auto_stories),
+          onPressed: () async {
+            _navigatedAway = true;
+            await _disconnect();
+            if (!mounted) return;
+            // ignore: use_build_context_synchronously
+            await Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const VoiceMemoriesScreen()),
+            );
+            _navigatedAway = false;
+          },
         ),
         actions: [
           IconButton(
-            tooltip: 'Voice Notes',
-            icon: const Icon(Icons.auto_stories),
-            onPressed: () async {
-              _navigatedAway = true;
-              await _disconnect();
-              if (!mounted) return;
-              // ignore: use_build_context_synchronously
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const VoiceMemoriesScreen()),
-              );
-              _navigatedAway = false;
-            },
+            tooltip: 'Chat',
+            icon: const Icon(Icons.chat_bubble_outline),
+            onPressed: _conversationStore == null
+                ? null
+                : () async {
+                    _navigatedAway = true;
+                    await _disconnect();
+
+                    if (!mounted) return;
+
+                    // ignore: use_build_context_synchronously
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ChatScreen(
+                          conversationStore: _conversationStore!,
+                          toolExecutor: executeTool,
+                        ),
+                      ),
+                    );
+                    _navigatedAway = false;
+                  },
           ),
           IconButton(
             tooltip: 'Settings',
