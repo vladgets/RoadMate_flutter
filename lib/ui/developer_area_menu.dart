@@ -44,13 +44,50 @@ class _SettingsScreenState extends State<DeveloperAreaScreen> {
               final stats = PhotoIndexService.instance.getStats();
               final indexed = stats['indexed'] as int;
               final total = stats['total'] as int;
+              final withTimestamps = stats['withTimestamps'] as int;
+              final withLocation = stats['withLocation'] as int;
+
               final subtitle = indexed == 0
                   ? 'Not indexed yet'
-                  : '$indexed of $total photos indexed';
+                  : '$indexed indexed ($withTimestamps with timestamps, $withLocation with location)';
               return ListTile(
                 leading: const Icon(Icons.photo_library),
                 title: const Text('Photo Album Index'),
                 subtitle: Text(subtitle),
+                onTap: () {
+                  // Show detailed stats dialog
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Photo Index Details'),
+                      content: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('Total photos in album: $total'),
+                            Text('Photos indexed: $indexed'),
+                            Text('Photos with timestamps: $withTimestamps'),
+                            Text('Photos with location: $withLocation'),
+                            const SizedBox(height: 16),
+                            if (stats['oldestPhoto'] != null)
+                              Text('Oldest photo: ${_formatDate(stats['oldestPhoto'] as String)}'),
+                            if (stats['newestPhoto'] != null)
+                              Text('Newest photo: ${_formatDate(stats['newestPhoto'] as String)}'),
+                            if (stats['last_indexed'] != null)
+                              Text('\nLast indexed: ${_formatDate(stats['last_indexed'] as String)}'),
+                          ],
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
                 trailing: IconButton(
                   icon: const Icon(Icons.refresh),
                   tooltip: 'Rebuild Index',
@@ -139,6 +176,26 @@ class _SettingsScreenState extends State<DeveloperAreaScreen> {
         ],
       ),
     );
+  }
+
+  String _formatDate(String isoString) {
+    try {
+      final date = DateTime.parse(isoString);
+      final now = DateTime.now();
+      final diff = now.difference(date);
+
+      if (diff.inDays == 0) {
+        return 'Today ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+      } else if (diff.inDays == 1) {
+        return 'Yesterday ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+      } else if (diff.inDays < 7) {
+        return '${diff.inDays} days ago';
+      } else {
+        return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      }
+    } catch (e) {
+      return isoString;
+    }
   }
 }
 

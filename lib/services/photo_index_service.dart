@@ -338,17 +338,31 @@ class PhotoIndexService {
   /// Search photos by time period
   Future<List<PhotoMetadata>> searchByTime(String timePeriod) async {
     if (_index == null || _index!.photos.isEmpty) {
+      // ignore: avoid_print
+      print('[PhotoIndexService] searchByTime: index is null or empty');
       return [];
     }
 
     final range = TimePeriodParser.parse(timePeriod);
-    if (range == null) return [];
+    if (range == null) {
+      // ignore: avoid_print
+      print('[PhotoIndexService] searchByTime: could not parse "$timePeriod"');
+      return [];
+    }
 
-    return _index!.photos.where((photo) {
+    // ignore: avoid_print
+    print('[PhotoIndexService] searchByTime: searching for photos between ${range.start} and ${range.end}');
+
+    final results = _index!.photos.where((photo) {
       if (photo.timestamp == null) return false;
       return photo.timestamp!.isAfter(range.start) &&
              photo.timestamp!.isBefore(range.end);
     }).toList();
+
+    // ignore: avoid_print
+    print('[PhotoIndexService] searchByTime: found ${results.length} photos');
+
+    return results;
   }
 
   /// Search photos by location and/or time
@@ -477,13 +491,34 @@ class PhotoIndexService {
         'indexed': 0,
         'total': 0,
         'last_indexed': null,
+        'withTimestamps': 0,
+        'withLocation': 0,
+        'oldestPhoto': null,
+        'newestPhoto': null,
       };
+    }
+
+    final photos = _index!.photos;
+    final photosWithTimestamps = photos.where((p) => p.timestamp != null).length;
+    final photosWithLocation = photos.where((p) => p.latitude != null && p.longitude != null).length;
+
+    DateTime? oldestTimestamp;
+    DateTime? newestTimestamp;
+    if (photosWithTimestamps > 0) {
+      final withTimestamps = photos.where((p) => p.timestamp != null).toList();
+      withTimestamps.sort((a, b) => a.timestamp!.compareTo(b.timestamp!));
+      oldestTimestamp = withTimestamps.first.timestamp;
+      newestTimestamp = withTimestamps.last.timestamp;
     }
 
     return {
       'indexed': _index!.photos.length,
       'total': _index!.totalPhotos,
       'last_indexed': _index!.lastIndexed?.toIso8601String(),
+      'withTimestamps': photosWithTimestamps,
+      'withLocation': photosWithLocation,
+      'oldestPhoto': oldestTimestamp?.toIso8601String(),
+      'newestPhoto': newestTimestamp?.toIso8601String(),
     };
   }
 
