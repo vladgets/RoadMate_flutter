@@ -15,6 +15,23 @@ router.post('/generate-background', async (req, res) => {
   try {
     const { photos, memories, style } = req.body;
 
+    // Validate input
+    if (!photos || !Array.isArray(photos) || photos.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Missing or invalid photos array',
+      });
+    }
+
+    if (!memories || !Array.isArray(memories) || memories.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Missing or invalid memories array',
+      });
+    }
+
+    console.log('[Collage] Generating collage for', photos.length, 'photos and', memories.length, 'memories');
+
     // 1. Analyze context
     const theme = analyzeTheme(photos, memories);
     const mood = analyzeMood(memories);
@@ -51,9 +68,21 @@ router.post('/generate-background', async (req, res) => {
   } catch (error) {
     // Fallback to template
     console.error('[Collage] DALL-E error:', error);
+    console.error('[Collage] Error details:', {
+      message: error.message,
+      status: error.status,
+      type: error.type,
+    });
+
+    // Check if OPENAI_API_KEY is set
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('[Collage] OPENAI_API_KEY is not set!');
+    }
+
     res.json({
       ok: true,
       fallback: true,
+      background_url: '', // Empty URL signals fallback
       template: {
         type: 'gradient',
         colors: ['#FF6B6B', '#4ECDC4', '#45B7D1'],
@@ -61,6 +90,7 @@ router.post('/generate-background', async (req, res) => {
       theme: 'nature',
       colors: ['#FF6B6B', '#4ECDC4', '#45B7D1'],
       message: 'Using template fallback',
+      error: error.message, // Include error message for debugging
     });
   }
 });
@@ -68,7 +98,7 @@ router.post('/generate-background', async (req, res) => {
 // Helper functions
 function analyzeTheme(photos, memories) {
   // Extract locations from photos
-  const locations = photos.map(p => (p.location || '').toLowerCase());
+  const locations = (photos || []).map(p => (p.location || '').toLowerCase());
 
   // Check for beach keywords
   if (locations.some(loc =>
@@ -108,7 +138,7 @@ function analyzeTheme(photos, memories) {
 }
 
 function analyzeMood(memories) {
-  const text = memories.map(m => (m.transcription || '').toLowerCase()).join(' ');
+  const text = (memories || []).map(m => (m.transcription || '').toLowerCase()).join(' ');
 
   if (text.match(/amazing|incredible|wonderful|happy|fun|exciting|joy/)) {
     return 'joyful';

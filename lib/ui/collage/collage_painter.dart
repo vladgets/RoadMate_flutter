@@ -28,10 +28,18 @@ class _CollagePainterState extends State<CollagePainter> {
 
   Future<void> _loadImages() async {
     try {
-      // Load background
-      final bg = await CollageComposer.instance.loadBackgroundFromUrl(
-        widget.composition.backgroundUrl,
-      );
+      // Load background (skip if URL is empty - will use gradient fallback)
+      ui.Image? bg;
+      if (widget.composition.backgroundUrl.isNotEmpty) {
+        try {
+          bg = await CollageComposer.instance.loadBackgroundFromUrl(
+            widget.composition.backgroundUrl,
+          );
+        } catch (e) {
+          // Background loading failed, will use gradient fallback
+          bg = null;
+        }
+      }
 
       // Load photos
       final photos = <ui.Image?>[];
@@ -90,6 +98,27 @@ class _CollagePainterImpl extends CustomPainter {
         rect: Rect.fromLTWH(0, 0, size.width, size.height),
         image: backgroundImage!,
         fit: BoxFit.cover,
+      );
+    } else {
+      // Fallback: Draw gradient background
+      final gradient = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(int.parse('0xFF${composition.colors[0].substring(1)}')),
+          Color(int.parse('0xFF${composition.colors[1].substring(1)}')),
+          Color(int.parse('0xFF${composition.colors[2].substring(1)}')),
+        ],
+      );
+
+      final paint = Paint()
+        ..shader = gradient.createShader(
+          Rect.fromLTWH(0, 0, size.width, size.height),
+        );
+
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        paint,
       );
     }
 
