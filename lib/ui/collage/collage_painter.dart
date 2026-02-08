@@ -170,27 +170,57 @@ class _CollagePainterImpl extends CustomPainter {
       final memory = composition.memories[i];
       final slot = composition.textSlots[i];
 
+      // Parse theme colors for glow effect
+      Color glowColor1 = _parseColor(composition.colors[0]);
+      Color glowColor2 = composition.colors.length > 1
+          ? _parseColor(composition.colors[1])
+          : glowColor1;
+
       final textPainter = TextPainter(
         text: TextSpan(
           text: memory.transcription.length > 120
               ? '${memory.transcription.substring(0, 120)}...'
               : memory.transcription,
           style: TextStyle(
-            color: slot.color,
+            color: Colors.white,
             fontSize: slot.fontSize,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-            height: 1.4,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+            height: 1.5,
             fontFamily: slot.style == 'handwritten' ? 'Courier' : null,
             shadows: [
+              // Outer glow (theme color 1)
               Shadow(
-                color: Colors.black.withValues(alpha: 0.8),
+                color: glowColor1.withValues(alpha: 0.9),
+                offset: const Offset(0, 0),
+                blurRadius: 20,
+              ),
+              Shadow(
+                color: glowColor1.withValues(alpha: 0.7),
+                offset: const Offset(0, 0),
+                blurRadius: 12,
+              ),
+              // Inner glow (theme color 2)
+              Shadow(
+                color: glowColor2.withValues(alpha: 0.8),
+                offset: const Offset(0, 0),
+                blurRadius: 8,
+              ),
+              // Strong black shadow for readability
+              Shadow(
+                color: Colors.black.withValues(alpha: 0.9),
+                offset: const Offset(3, 3),
+                blurRadius: 6,
+              ),
+              Shadow(
+                color: Colors.black.withValues(alpha: 0.7),
                 offset: const Offset(2, 2),
                 blurRadius: 4,
               ),
+              // Subtle white highlight
               Shadow(
-                color: Colors.black.withValues(alpha: 0.4),
-                offset: const Offset(1, 1),
+                color: Colors.white.withValues(alpha: 0.3),
+                offset: const Offset(-1, -1),
                 blurRadius: 2,
               ),
             ],
@@ -205,57 +235,22 @@ class _CollagePainterImpl extends CustomPainter {
       final textX = slot.position.dx * size.width;
       final textY = slot.position.dy * size.height;
 
-      // Draw semi-transparent background box
-      final padding = 16.0;
-      final backgroundRect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-          textX - padding,
-          textY - padding,
-          textPainter.width + padding * 2,
-          textPainter.height + padding * 2,
-        ),
-        const Radius.circular(12),
-      );
-
-      // Draw shadow behind background box
-      canvas.drawRRect(
-        backgroundRect,
-        Paint()
-          ..color = Colors.black.withValues(alpha: 0.3)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-      );
-
-      // Draw background box with gradient
-      final gradient = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Colors.black.withValues(alpha: 0.65),
-          Colors.black.withValues(alpha: 0.75),
-        ],
-      );
-
-      canvas.drawRRect(
-        backgroundRect,
-        Paint()
-          ..shader = gradient.createShader(backgroundRect.outerRect),
-      );
-
-      // Draw decorative border
-      canvas.drawRRect(
-        backgroundRect,
-        Paint()
-          ..color = Colors.white.withValues(alpha: 0.15)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5,
-      );
-
-      // Paint the text
+      // Paint the text with glow effect
       textPainter.paint(
         canvas,
         Offset(textX, textY),
       );
     }
+  }
+
+  // Helper to parse hex color strings
+  Color _parseColor(String hex) {
+    try {
+      return Color(int.parse('0xFF${hex.substring(1)}'));
+    } catch (e) {
+      return Colors.blue; // Fallback color
+    }
+  }
   }
 
   @override
