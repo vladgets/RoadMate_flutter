@@ -169,7 +169,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.mic_none),
+            icon: const Icon(Icons.auto_stories),
             tooltip: 'Voice Notes',
             onPressed: () {
               Navigator.of(context).push(
