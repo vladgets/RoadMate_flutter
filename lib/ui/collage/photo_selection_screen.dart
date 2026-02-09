@@ -13,7 +13,7 @@ class PhotoSelectionScreen extends StatefulWidget {
 }
 
 class _PhotoSelectionScreenState extends State<PhotoSelectionScreen> {
-  List<PhotoAttachment> _selectedPhotos = [];
+  final List<PhotoAttachment> _selectedPhotos = [];
   List<PhotoMetadata> _allPhotos = [];
   bool _isLoading = true;
 

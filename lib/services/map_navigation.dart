@@ -112,7 +112,7 @@ Future<Map<String, dynamic>> handleOpenMapsRouteToolCall(Map<String, dynamic> ar
     );
   } else if (Platform.isIOS) {
     // make delayed launch of the Nav app so that Assistant can first speak its response
-    delayedLaunch = true; 
+    delayedLaunch = false; 
 
     // iOS: Apple Maps / Google Maps / Waze handoff via URL schemes or universal links.
     final isWalking = routeType == "on_foot";

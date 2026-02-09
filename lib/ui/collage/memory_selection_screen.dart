@@ -18,7 +18,7 @@ class MemorySelectionScreen extends StatefulWidget {
 }
 
 class _MemorySelectionScreenState extends State<MemorySelectionScreen> {
-  List<VoiceMemory> _selectedMemories = [];
+  final List<VoiceMemory> _selectedMemories = [];
   List<VoiceMemory> _allMemories = [];
   bool _isLoading = true;
 
