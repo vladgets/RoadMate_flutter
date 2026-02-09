@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:firebase_core/firebase_core.dart';
 // import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'config.dart';
 import 'ui/main_settings_menu.dart';
 import 'ui/onboarding_screen.dart';
@@ -39,7 +41,29 @@ Future<void> main() async {
   // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   // FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-  // some initial setup  
+  // Initialize foreground service for voice mode
+  FlutterForegroundTask.init(
+    androidNotificationOptions: AndroidNotificationOptions(
+      channelId: 'roadmate_voice_channel',
+      channelName: 'RoadMate Voice Assistant',
+      channelDescription: 'Keeps voice assistant active when screen is locked',
+      channelImportance: NotificationChannelImportance.LOW,
+      priority: NotificationPriority.LOW,
+    ),
+    iosNotificationOptions: const IOSNotificationOptions(
+      showNotification: false,
+      playSound: false,
+    ),
+    foregroundTaskOptions: ForegroundTaskOptions(
+      eventAction: ForegroundTaskEventAction.nothing(),
+      autoRunOnBoot: false,
+      autoRunOnMyPackageReplaced: false,
+      allowWakeLock: true,
+      allowWifiLock: false,
+    ),
+  );
+
+  // some initial setup
   await Config.loadSavedVoice();
 
   // Initialize reminders service
@@ -57,6 +81,49 @@ Future<void> main() async {
   ]);
 
   runApp(const MyApp());
+}
+
+/// Foreground task callback (required by flutter_foreground_task)
+@pragma('vm:entry-point')
+void startCallback() {
+  FlutterForegroundTask.setTaskHandler(VoiceForegroundTaskHandler());
+}
+
+/// Handler for foreground task
+class VoiceForegroundTaskHandler extends TaskHandler {
+  @override
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
+    // Called when the foreground service starts
+  }
+
+  @override
+  void onRepeatEvent(DateTime timestamp) {
+    // Called periodically - we don't need to do anything here
+  }
+
+  @override
+  Future<void> onDestroy(DateTime timestamp) async {
+    // Called when the foreground service is destroyed
+  }
+
+  @override
+  void onNotificationButtonPressed(String id) {
+    // Handle notification button presses (e.g., "Stop" button)
+    if (id == 'stop') {
+      FlutterForegroundTask.stopService();
+    }
+  }
+
+  @override
+  void onNotificationPressed() {
+    // Handle notification tap - bring app to foreground
+    FlutterForegroundTask.launchApp('/');
+  }
+
+  @override
+  void onNotificationDismissed() {
+    // Handle notification dismissal
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -339,6 +406,12 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
 
       await _pc!.setRemoteDescription(RTCSessionDescription(answerSdp, 'answer'));
 
+      // Enable wakelock to keep microphone active even when screen is locked
+      await WakelockPlus.enable();
+
+      // Start foreground service to prevent Android from killing the app
+      await _startForegroundService();
+
       setState(() {
         _connected = true;
         _status = "Connected. Talk!";
@@ -409,6 +482,12 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     } catch (_) {
       // ignore cleanup errors
     } finally {
+      // Disable wakelock when disconnecting
+      await WakelockPlus.disable();
+
+      // Stop foreground service
+      await _stopForegroundService();
+
       _dc = null;
       _pc = null;
       _mic = null;
@@ -422,6 +501,30 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
           _status = "Disconnected.";
         });
       }
+    }
+  }
+
+  /// Start foreground service to keep microphone active when screen is locked
+  Future<void> _startForegroundService() async {
+    if (await FlutterForegroundTask.isRunningService) {
+      return; // Already running
+    }
+
+    await FlutterForegroundTask.startService(
+      serviceId: 256,
+      notificationTitle: 'RoadMate Voice Assistant',
+      notificationText: 'Voice mode is active',
+      notificationButtons: [
+        const NotificationButton(id: 'stop', text: 'Stop'),
+      ],
+      callback: startCallback,
+    );
+  }
+
+  /// Stop foreground service
+  Future<void> _stopForegroundService() async {
+    if (await FlutterForegroundTask.isRunningService) {
+      await FlutterForegroundTask.stopService();
     }
   }
 
