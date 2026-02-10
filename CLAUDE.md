@@ -154,15 +154,6 @@ Gmail and YouTube use device-based OAuth:
 - **Preferences** (`preferences.txt`): User-editable preferences injected into system prompt
 - Both stored in app documents directory via `path_provider`
 
-### Firebase (Currently Disabled)
-
-Push notification support is implemented but commented out:
-- Firebase Admin SDK in server
-- FCM token registration routes
-- Background message handler in app
-
-To re-enable, uncomment Firebase initialization in `main.dart` and `server.js`.
-
 ## Platform-Specific Notes
 
 ### iOS
@@ -201,7 +192,6 @@ Voice selection persists in SharedPreferences:
 
 Server expects:
 - `OPENAI_API_KEY` environment variable
-- Firebase Admin credentials (if using push notifications)
 - Node.js runtime
 
 Current production deployment: Render.com at `https://roadmate-flutter.onrender.com`

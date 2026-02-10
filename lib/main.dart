@@ -1,13 +1,10 @@
 import 'dart:convert';
 import 'dart:async';
-// import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-// import 'package:firebase_core/firebase_core.dart';
-// import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -30,16 +27,11 @@ import 'services/photo_index_service.dart';
 import 'services/voice_memory_store.dart';
 import 'services/whatsapp_service.dart';
 import 'ui/voice_memories_screen.dart';
-// import 'firebase_messaging.dart';
 
 
 /// Main entry point (keets app in portrait mode only)
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Firebase init for push messaging (disable for now)
-  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  // FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
   // Initialize foreground service for voice mode
   FlutterForegroundTask.init(

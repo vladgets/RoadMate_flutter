@@ -1,24 +1,14 @@
 import express from "express";
 import { registerGmailRoutes } from "./gmail.js";
 import { registerGoogleMapsRoutes } from "./google_maps.js";
-import { registerUserLocationRoutes } from "./user_location.js";
 import { registerYouTubeRoutes } from "./youtube.js";
 import { registerCollageRoutes } from "./collage.js";
-import admin from "firebase-admin";
 
 const app = express();
 app.use(express.json());
 
-// Initialize Firebase Admin once for the whole server (used by user_location routes)
-if (!admin.apps?.length) {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-  });
-}
-
 registerGmailRoutes(app);
 registerGoogleMapsRoutes(app);
-registerUserLocationRoutes(app);
 registerYouTubeRoutes(app);
 registerCollageRoutes(app);
 

@@ -30,6 +30,11 @@ migrate_working_dir/
 # Node.js
 node_modules/
 
+# Firebase configuration files (removed from project)
+firebase.json
+ios/Runner/GoogleService-Info.plist
+android/app/google-services.json
+
 # Flutter repo-specific
 /bin/cache/
 /bin/internal/bootstrap.bat
