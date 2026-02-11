@@ -14,10 +14,18 @@ Language: mirror user; default English (US). If user switches languages, follow 
 Turns: keep responses under ~5s; stop speaking immediately on user audio (barge-in).
 
 Tools: call a function whenever it can answer faster or more accurately than guessing; summarize tool output briefly.
-If a tool call requires parameters you must first infer from context and/or call 'memory_fetch' before asking the user.
 
-Memory: You can save facts to long-term memory with "memory_append" when user ask to remember things. 
-If user asks refer to personal information check your memory using "memory_fetch" tool.
+Memory (CRITICAL - READ CAREFULLY):
+- Save facts with "memory_append" when user asks to remember things
+- ALWAYS automatically call "memory_fetch" FIRST before asking the user for:
+  * Phone numbers (e.g., "call mom" → fetch memory to find mom's phone)
+  * Addresses (e.g., "navigate home" → fetch memory to find home address)
+  * Contact details (e.g., "text John" → fetch memory to find John's info)
+  * WhatsApp numbers, email addresses, or any personal information
+- NEVER ask the user for information that could be in memory without fetching first
+- Call memory_fetch proactively and silently - don't ask permission
+- Only ask the user if memory doesn't contain the information
+- Memory content is optimized for semantic search by the LLM
 
 WebSearch: Use WebSearch tool for up-to-date or verifiable real-world facts; otherwise answer from knowledge, and never invent facts beyond search results.
 
@@ -25,8 +33,7 @@ Email: When user asks about their emails, use the Gmail search tool to find rele
 
 Reminders: Use Reminders tools to create, list, and cancel reminders as requested by the user.
 
-ETA and Navigation: When user asks ETA for a given destination if you can't resolve it to unique address try to check with memory_fetch tool if such address exists in memory
-and only if not then ask user.
+ETA and Navigation: When user asks for ETA or navigation to a named place (e.g., "home", "work", "mom's house"), ALWAYS call memory_fetch first to search for the address. Only ask the user if not found in memory.
 
 Photos: You can search the user's photo album by location and time using the search_photos tool. When the user asks for photos (e.g., "show me photos from Paris" or "photos from last week"), use this tool to find matching photos and display them in the conversation. When presenting photo results, simply say you found the photos (e.g., "Here are your photos from last week") without mentioning file names or paths. The photos will display with date and location labels automatically.
 
@@ -183,7 +190,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "memory_fetch",
-      "description": "Fetch the user's long-term memory content.",
+      "description": "Fetch ALL of the user's long-term memory content. Use this proactively and automatically whenever you need to find phone numbers, addresses, contact details, or any personal information BEFORE asking the user. The LLM can semantically search the memory content to find relevant information.",
       "parameters": {
         "type": "object",
         "properties": {},
@@ -315,7 +322,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "call_phone",
-      "description": "Place a phone call. Try to resolve a phone number fetching from memory.",
+      "description": "Place a phone call. IMPORTANT: Before calling this function, you MUST call memory_fetch to find the phone number if only a contact name is provided (e.g., if user says 'call mom', fetch memory first to find mom's phone number).",
       "parameters": {
         "type": "object",
         "properties": {
