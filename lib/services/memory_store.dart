@@ -98,58 +98,6 @@ class MemoryStore {
     };
   }
 
-  /// Tool-compatible wrapper: search memory for specific information
-  /// Expected args: { "query": "..." }
-  static Future<Map<String, dynamic>> toolSearch(dynamic args) async {
-    final query = (args is Map && args['query'] is String)
-        ? (args['query'] as String).toLowerCase()
-        : '';
-
-    if (query.isEmpty) {
-      return {
-        'ok': false,
-        'error': 'Query parameter is required',
-        'results': [],
-      };
-    }
-
-    final text = await readAll();
-    if (text.isEmpty) {
-      return {
-        'ok': true,
-        'query': query,
-        'results': [],
-        'message': 'Memory is empty',
-      };
-    }
-
-    // Split into lines and filter by query
-    final allLines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
-    final queryWords = query.split(' ').where((w) => w.isNotEmpty).toList();
-
-    // Find lines that contain any of the query words (case-insensitive)
-    final matchingLines = allLines.where((line) {
-      final lineLower = line.toLowerCase();
-      return queryWords.any((word) => lineLower.contains(word));
-    }).toList();
-
-    if (matchingLines.isEmpty) {
-      return {
-        'ok': true,
-        'query': query,
-        'results': [],
-        'message': 'No matching information found in memory',
-      };
-    }
-
-    return {
-      'ok': true,
-      'query': query,
-      'results': matchingLines,
-      'count': matchingLines.length,
-    };
-  }
-
   /// Tool-compatible wrapper: read full memory contents
   static Future<Map<String, dynamic>> toolRead() async {
     final text = await readAll();

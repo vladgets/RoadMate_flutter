@@ -617,9 +617,6 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   'memory_append': (args) async {
     return await MemoryStore.toolAppend(args);
   },
-  'memory_search': (args) async {
-    return await MemoryStore.toolSearch(args);
-  },
   'memory_fetch': (_) async {
     return await MemoryStore.toolRead();
   },
