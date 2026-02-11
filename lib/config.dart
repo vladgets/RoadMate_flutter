@@ -7,44 +7,28 @@ import 'services/memory_store.dart';
 
 class Config {
   static const String systemPromptTemplate = '''
-You are a realtime voice AI assistant helping users on the go.
+Realtime voice assistant for users on the go.
 
-Personality: warm, witty, quick-talking; conversationally human. 
-Language: mirror user; default English (US). If user switches languages, follow their accent/dialect after one brief confirmation.
-Turns: keep responses under ~5s; stop speaking immediately on user audio (barge-in).
+Personality: warm, witty, quick, conversational.
+Language: mirror user (default: US English).
+Responses: <5s; stop on user audio (barge-in).
+Tools: use when faster/accurate; summarize output.
 
-Tools: call a function whenever it can answer faster or more accurately than guessing; summarize tool output briefly.
+Memory (CRITICAL):
+- ALWAYS call memory_fetch FIRST before asking for phone numbers, addresses, contacts, or personal info
+- Never ask for info that could be in memory without checking
+- Only ask user if not in memory
+- Save with memory_append when requested
 
-Memory (CRITICAL - READ CAREFULLY):
-- Save facts with "memory_append" when user asks to remember things
-- ALWAYS automatically call "memory_fetch" FIRST before asking the user for:
-  * Phone numbers (e.g., "call mom" → fetch memory to find mom's phone)
-  * Addresses (e.g., "navigate home" → fetch memory to find home address)
-  * Contact details (e.g., "text John" → fetch memory to find John's info)
-  * WhatsApp numbers, email addresses, or any personal information
-- NEVER ask the user for information that could be in memory without fetching first
-- Call memory_fetch proactively and silently - don't ask permission
-- Only ask the user if memory doesn't contain the information
-- Memory content is optimized for semantic search by the LLM
+Voice Notes vs Memory:
+- memory_append/fetch = short facts
+- save_voice_note = longer stories (auto-captures location/time)
+- search_voice_notes = search by text/location/time
 
-WebSearch: Use WebSearch tool for up-to-date or verifiable real-world facts; otherwise answer from knowledge, and never invent facts beyond search results.
+Photos: search_photos by location/time. Present simply.
+WebSearch: for up-to-date/verifiable facts only.
 
-Email: When user asks about their emails, use the Gmail search tool to find relevant emails. Use all the search terms in English.
-
-Reminders: Use Reminders tools to create, list, and cancel reminders as requested by the user.
-
-ETA and Navigation: When user asks for ETA or navigation to a named place (e.g., "home", "work", "mom's house"), ALWAYS call memory_fetch first to search for the address. Only ask the user if not found in memory.
-
-Photos: You can search the user's photo album by location and time using the search_photos tool. When the user asks for photos (e.g., "show me photos from Paris" or "photos from last week"), use this tool to find matching photos and display them in the conversation. When presenting photo results, simply say you found the photos (e.g., "Here are your photos from last week") without mentioning file names or paths. The photos will display with date and location labels automatically.
-
-Voice Notes: The "save_voice_note" and "search_voice_notes" tools are completely separate from the memory tools above.
-- "memory_append" / "memory_fetch" = short factual notes about the user (e.g., "user likes jazz", "car is a Toyota Camry"). Use these when the user says "remember that I…" followed by a short fact.
-- "save_voice_note" = longer stories, narratives, experiences, and descriptions of events or places (e.g., "I had an amazing dinner at that rooftop restaurant overlooking the bay"). Use this when the user tells you a story or describes an experience they want to keep. Location and time are captured automatically.
-- "search_voice_notes" = search saved voice notes by text, location, or time (e.g., "what did I note about that restaurant?" or "what notes do I have from last week?").
-
-WhatsApp Messages: Use "send_whatsapp_message" to send text messages (and optionally photos) to contacts via WhatsApp. The contact must be saved in memory first (e.g., "remember mom's WhatsApp is +1234567890"). Photos can be included by specifying location and/or time. WhatsApp will open with the message pre-filled; the user must tap Send to confirm.
-
-Current date: {{CURRENT_DATE_READABLE}}
+Date: {{CURRENT_DATE_READABLE}}
 ''';
 
   static const String model = "gpt-realtime-mini-2025-12-15";
@@ -162,27 +146,21 @@ $trimmedPrefs''';
   // a `function_call_output` event with the returned JSON.
   static const List<Map<String, dynamic>> tools = [
     // location related tool
-    { 
+    {
       "type": "function",
-        "name": "get_current_location",
-        "description": "Get the user's current GPS location.",
-        "parameters": {
-          "type": "object",
-          "properties": {}
-        }
+      "name": "get_current_location",
+      "description": "Get current GPS location.",
+      "parameters": {"type": "object", "properties": {}}
     },
     // memory related tools
     {
       "type": "function",
       "name": "memory_append",
-      "description": "Append a single fact into the user's long-term memory.",
+      "description": "Save a fact to long-term memory.",
       "parameters": {
         "type": "object",
         "properties": {
-          "text": {
-            "type": "string",
-            "description": "A single factual sentence to remember."
-          }
+          "text": {"type": "string", "description": "Fact to remember."}
         },
         "required": ["text"]
       }
@@ -190,44 +168,31 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "memory_fetch",
-      "description": "Fetch ALL of the user's long-term memory content. Use this proactively and automatically whenever you need to find phone numbers, addresses, contact details, or any personal information BEFORE asking the user. The LLM can semantically search the memory content to find relevant information.",
-      "parameters": {
-        "type": "object",
-        "properties": {},
-      }
+      "description": "Fetch all long-term memory. Use automatically before asking for phone numbers, addresses, contacts, or personal info.",
+      "parameters": {"type": "object", "properties": {}}
     },
     // calendar related tools
     {
       "type": "function",
       "name": "get_calendar_data",
-      "description": "Fetch user calendar data.",
-      "parameters": {
-        "type": "object",
-        "properties": {},
-      }
+      "description": "Fetch calendar events.",
+      "parameters": {"type": "object", "properties": {}}
     },
     // time and date
     {
       "type": "function",
       "name": "get_current_time",
-      "description": "Returns the user's current local date and time.",
-      "parameters": {
-        "type": "object",
-        "properties": {}
-      }
+      "description": "Get current local date and time.",
+      "parameters": {"type": "object", "properties": {}}
     },
     // web search tool
     {
       "type": "function",
       "name": "web_search",
-      "description": "Search the web for up-to-date real-world information.",
+      "description": "Search web for up-to-date info.",
       "parameters": {
         "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-          }
-        },
+        "properties": {"query": {"type": "string"}},
         "required": ["query"]
       }
     },
@@ -235,7 +200,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "gmail_search",
-      "description": "Search Gmail using simple fields. Returns a small list of email cards: from/subject/date/snippet.",
+      "description": "Search Gmail. Returns from/subject/date/snippet.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -253,7 +218,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "gmail_read_email",
-      "description": "Get full email content by message ID.",
+      "description": "Read full email by ID.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -266,7 +231,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "traffic_eta",
-      "description": "Get ETA and traffic summary between current location and a destination. ",
+      "description": "Get ETA and traffic to destination.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -295,7 +260,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "navigate_to_destination",
-      "description": "Open the phone's Maps app showing a route from current location to a destination.",
+      "description": "Open Maps app with route to destination.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -322,7 +287,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "call_phone",
-      "description": "Place a phone call. IMPORTANT: Before calling this function, you MUST call memory_fetch to find the phone number if only a contact name is provided (e.g., if user says 'call mom', fetch memory first to find mom's phone number).",
+      "description": "Place call. MUST call memory_fetch first if only contact name provided.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -342,7 +307,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "reminder_create",
-      "description": "Create a local reminder that triggers a notification at a specific time.",
+      "description": "Create reminder with notification.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -361,16 +326,13 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "reminder_list",
-      "description": "List all upcoming reminders.",
-      "parameters": {
-        "type": "object",
-        "properties": {}
-      },
+      "description": "List upcoming reminders.",
+      "parameters": {"type": "object", "properties": {}}
     },
     {
       "type": "function",
       "name": "reminder_cancel",
-      "description": "Cancel a previously created reminder by id.",
+      "description": "Cancel reminder by ID.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -386,11 +348,8 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "youtube_subscriptions_feed",
-      "description": "Get the latest recommended videos from the user's YouTube subscriptions feed.",
-      "parameters": {
-        "type": "object",
-        "properties": {},
-      }
+      "description": "Get latest videos from YouTube subscriptions.",
+      "parameters": {"type": "object", "properties": {}}
     },
     {
       "type": "function",
@@ -415,7 +374,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "search_photos",
-      "description": "Search the user's photo album by location and/or time. Returns photos matching the criteria with their metadata.",
+      "description": "Search photos by location/time.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -438,7 +397,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "save_voice_note",
-      "description": "Save a voice note — a story, narrative, or description of an event or place.",
+      "description": "Save story/narrative (auto-captures location/time).",
       "parameters": {
         "type": "object",
         "properties": {
@@ -453,7 +412,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "search_voice_notes",
-      "description": "Search the user's saved voice notes by text content, location, and/or time period.",
+      "description": "Search voice notes by text/location/time.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -479,7 +438,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "send_whatsapp_message",
-      "description": "Send a message to a WhatsApp contact saved in memory. Optionally include a photo from the album.",
+      "description": "Send WhatsApp message (contact must be in memory). Can include photo.",
       "parameters": {
         "type": "object",
         "properties": {
