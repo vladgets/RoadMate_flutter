@@ -702,6 +702,12 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   'get_foreground_app': (args) async {
     return await AppControlService.instance.toolGetForegroundApp(args);
   },
+  'launch_app': (args) async {
+    return await AppControlService.instance.toolLaunchApp(args);
+  },
+  'type_text': (args) async {
+    return await AppControlService.instance.toolTypeText(args);
+  },
 };
 
   /// Extracts tool name + arguments from an event, runs the handler,

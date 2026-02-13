@@ -29,11 +29,10 @@ Photos: search_photos by location/time. Present simply.
 WebSearch: for up-to-date/verifiable facts only.
 
 App Voice Control (Android only):
-- Tap buttons in any foreground app by voice
-- Trigger: "confirm", "yes", "no", "not there", "dismiss", "skip", "close", "OK" — especially during navigation
-- Short commands in navigation context: call tap_ui_button directly
-- Explicit: "press X in Waze" → tap_ui_button(button_text: "X", app_hint: "Waze")
-- "what app is open" / "what buttons" / "what's on screen" / "check again" → ALWAYS call get_foreground_app — never answer from memory, the foreground app may have changed since last check
+- Tap: "confirm", "yes", "no", "dismiss", "skip", "close" → tap_ui_button
+- Launch: "open Spotify", "launch Waze", "start Google Maps" → launch_app
+- Type: "type hello in the search", "enter my email" → type_text
+- Inspect: "what app is open" / "what buttons" / "what's on screen" / "check again" → ALWAYS call get_foreground_app — never answer from memory
 - If disabled: tell user to enable in RoadMate Settings > App Control
 - Confirm: "Done!" on success; explain if button not found
 
@@ -500,6 +499,40 @@ $trimmedPrefs''';
       "name": "get_foreground_app",
       "description": "Get the currently active foreground app and what's visible on screen: package name, list of tappable buttons, and all visible text. Use when user asks what app is open, what buttons are available, or before deciding what to tap.",
       "parameters": {"type": "object", "properties": {}}
+    },
+    {
+      "type": "function",
+      "name": "launch_app",
+      "description": "Open/launch an app on the device by name. Use when user says 'open Spotify', 'launch Waze', 'start Google Maps', 'go to Instagram', etc.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "app_name": {
+            "type": "string",
+            "description": "Name of the app to launch (e.g. 'Spotify', 'Google Maps', 'WhatsApp', 'Facebook')"
+          }
+        },
+        "required": ["app_name"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "type_text",
+      "description": "Type text into an editable text field in the currently active foreground app. Use when user says 'type X', 'enter X', 'write X in the search box', 'fill in my email', etc.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The text to type into the field"
+          },
+          "field_hint": {
+            "type": "string",
+            "description": "Optional: hint to identify which field to type in, e.g. 'search', 'email', 'message'. Leave empty to use the first available editable field."
+          }
+        },
+        "required": ["text"]
+      }
     }
   ];
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_accessibility_service/accessibility_event.dart';
 import 'package:flutter_accessibility_service/constants.dart';
@@ -25,6 +26,10 @@ class AppControlService {
   static const _maxWindowEvents = 5;
 
   /// Recent rich content events per package.
+  /// 8 events gives enough coverage for complex screens (Google Maps, etc.).
+  /// Staleness is handled by eviction: typeWindowStateChanged clears this
+  /// buffer for that package, and _evictStalePackages() removes non-foreground
+  /// packages before every query.
   final Map<String, List<AccessibilityEvent>> _contentEventsByPkg = {};
   static const _maxContentEvents = 8;
 
@@ -70,6 +75,9 @@ class AppControlService {
 
     if (event.eventType == EventType.typeWindowStateChanged) {
       _lastFocusTime[pkg] = DateTime.now();
+      // New screen/window for this package — clear stale content events so
+      // buttons from the previous screen don't bleed into the new one.
+      _contentEventsByPkg.remove(pkg);
       debugPrint('[AppControl] FOCUS pkg=$pkg rich=$isRich nodes=$nodeCount '
           'focused=${event.isFocused} active=${event.isActive}');
       if (isRich) {
@@ -158,6 +166,8 @@ class AppControlService {
   }
 
   /// All cached events for the foreground app: window events + content events.
+  /// Only returns events for the CURRENT foreground package — never mixes
+  /// events from different apps.
   List<AccessibilityEvent> get _foregroundEvents {
     final pkg = foregroundPackage;
     if (pkg == null) return [];
@@ -165,6 +175,15 @@ class AppControlService {
       ...(_windowEventsByPkg[pkg] ?? []),
       ...(_contentEventsByPkg[pkg] ?? []),
     ];
+  }
+
+  /// Wipe stale cached events for any package that is no longer foreground.
+  /// Call before reading screen content to ensure old-app data is gone.
+  void _evictStalePackages() {
+    final current = foregroundPackage;
+    if (current == null) return;
+    _windowEventsByPkg.removeWhere((k, _) => k != current);
+    _contentEventsByPkg.removeWhere((k, _) => k != current);
   }
 
   // ── Ensure events ──────────────────────────────────────────────────────────
@@ -196,11 +215,14 @@ class AppControlService {
   // ── Node helpers ───────────────────────────────────────────────────────────
 
   /// Whether a node is interactively tappable.
-  /// Checks both isClickable flag AND the actions list (Google Maps and other
-  /// apps often leave isClickable=null while still having actionClick).
+  /// Checks isClickable flag, actions list (Google Maps leaves isClickable=null
+  /// but has actionClick in actions), and isLongClickable as a last resort.
   bool _isTappable(AccessibilityEvent node) {
     if (node.isClickable == true) return true;
-    return node.actions?.contains(NodeAction.actionClick) == true;
+    if (node.isLongClickable == true) return true;
+    if (node.actions?.contains(NodeAction.actionClick) == true) return true;
+    if (node.actions?.contains(NodeAction.actionLongClick) == true) return true;
+    return false;
   }
 
   /// Extracts a human-readable label from a node.
@@ -303,6 +325,7 @@ class AppControlService {
   Future<bool> tapButtonByText(String text) async {
     if (!Platform.isAndroid) return false;
     if (!await _ensureEvents()) return false;
+    _evictStalePackages();
 
     for (final event in _foregroundEvents.reversed) {
       final match = _findTappableNode(event, text);
@@ -352,6 +375,173 @@ class AppControlService {
     };
   }
 
+  // ── App launcher ───────────────────────────────────────────────────────────
+
+  /// Common app name → Android package name mappings.
+  static const _appPackages = {
+    'google maps': 'com.google.android.apps.maps',
+    'maps': 'com.google.android.apps.maps',
+    'navigation': 'com.google.android.apps.maps',
+    'waze': 'com.waze',
+    'spotify': 'com.spotify.music',
+    'facebook': 'com.facebook.katana',
+    'fb': 'com.facebook.katana',
+    'messenger': 'com.facebook.orca',
+    'instagram': 'com.instagram.android',
+    'whatsapp': 'com.whatsapp',
+    'youtube': 'com.google.android.youtube',
+    'gmail': 'com.google.android.gm',
+    'chrome': 'com.android.chrome',
+    'telegram': 'org.telegram.messenger',
+    'twitter': 'com.twitter.android',
+    'x': 'com.twitter.android',
+    'tiktok': 'com.zhiliaoapp.musically',
+    'uber': 'com.ubercab',
+    'lyft': 'me.lyft.android',
+    'netflix': 'com.netflix.mediaclient',
+    'snapchat': 'com.snapchat.android',
+    'phone': 'com.google.android.dialer',
+    'dialer': 'com.google.android.dialer',
+    'settings': 'com.android.settings',
+    'camera': 'com.android.camera2',
+    'photos': 'com.google.android.apps.photos',
+    'google photos': 'com.google.android.apps.photos',
+    'calendar': 'com.google.android.calendar',
+    'messages': 'com.google.android.apps.messaging',
+    'sms': 'com.google.android.apps.messaging',
+    'play store': 'com.android.vending',
+    'google play': 'com.android.vending',
+    'maps me': 'com.mapswithme.maps.pro',
+    'maps.me': 'com.mapswithme.maps.pro',
+    'google': 'com.google.android.googlequicksearchbox',
+    'amazon': 'com.amazon.mShop.android.shopping',
+    'linkedin': 'com.linkedin.android',
+    'discord': 'com.discord',
+    'reddit': 'com.reddit.frontpage',
+    'zoom': 'us.zoom.videomeetings',
+    'slack': 'com.Slack',
+    'teams': 'com.microsoft.teams',
+    'microsoft teams': 'com.microsoft.teams',
+    'outlook': 'com.microsoft.office.outlook',
+    'signal': 'org.thoughtcrime.securesms',
+  };
+
+  Future<Map<String, dynamic>> toolLaunchApp(dynamic args) async {
+    final String? appName = args['app_name'] as String?;
+    if (appName == null || appName.trim().isEmpty) {
+      return {'ok': false, 'error': 'app_name is required'};
+    }
+    if (!Platform.isAndroid) {
+      return {'ok': false, 'error': 'App launching is only supported on Android'};
+    }
+
+    final key = appName.trim().toLowerCase();
+    final pkg = _appPackages[key];
+    if (pkg == null) {
+      return {
+        'ok': false,
+        'error': 'Unknown app "$appName". Try the exact app name (e.g. "Spotify", "Google Maps").',
+      };
+    }
+
+    try {
+      final intent = AndroidIntent(
+        action: 'android.intent.action.MAIN',
+        category: 'android.intent.category.LAUNCHER',
+        package: pkg,
+        flags: <int>[
+          Flag.FLAG_ACTIVITY_NEW_TASK,
+          Flag.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED,
+        ],
+      );
+      await intent.launch();
+      debugPrint('[AppControl] Launched $appName ($pkg)');
+      return {'ok': true, 'message': 'Opened $appName'};
+    } catch (e) {
+      debugPrint('[AppControl] launch error: $e');
+      return {'ok': false, 'error': 'Could not open $appName. Is it installed?'};
+    }
+  }
+
+  // ── Type text ──────────────────────────────────────────────────────────────
+
+  /// Find the first editable node in the tree, optionally near a label hint.
+  AccessibilityEvent? _findEditableNode(AccessibilityEvent root, String? hint) {
+    AccessibilityEvent? best;
+
+    void walk(AccessibilityEvent node) {
+      if (node.isEditable == true) {
+        if (hint == null || hint.isEmpty) {
+          best ??= node; // take first editable
+        } else {
+          // Prefer a node whose text or nodeId contains the hint
+          final label = (_nodeLabel(node) ?? '').toLowerCase();
+          final id = (node.nodeId ?? '').toLowerCase();
+          if (label.contains(hint.toLowerCase()) || id.contains(hint.toLowerCase())) {
+            best = node;
+            return;
+          }
+          best ??= node; // fallback: first editable
+        }
+      }
+      for (final child in node.subNodes ?? []) { walk(child); }
+    }
+
+    walk(root);
+    return best;
+  }
+
+  Future<Map<String, dynamic>> toolTypeText(dynamic args) async {
+    final String? text = args['text'] as String?;
+    final String? fieldHint = args['field_hint'] as String?;
+
+    if (text == null || text.isEmpty) {
+      return {'ok': false, 'error': 'text is required'};
+    }
+    if (!Platform.isAndroid) {
+      return {'ok': false, 'error': 'App control is only supported on Android'};
+    }
+    final enabled = await isAccessibilityEnabled();
+    if (!enabled) {
+      return {
+        'ok': false,
+        'error': 'Accessibility permission not granted. Enable App Control in RoadMate Settings.',
+      };
+    }
+    startListening();
+    if (!await _ensureEvents()) {
+      return {'ok': false, 'error': 'No screen content available'};
+    }
+    _evictStalePackages();
+
+    AccessibilityEvent? editableNode;
+    for (final event in _foregroundEvents.reversed) {
+      editableNode = _findEditableNode(event, fieldHint);
+      if (editableNode != null) break;
+    }
+
+    if (editableNode == null) {
+      return {'ok': false, 'error': 'No editable text field found on screen'};
+    }
+
+    try {
+      // Click first to focus the field
+      await FlutterAccessibilityService.performAction(editableNode, NodeAction.actionClick);
+      await Future.delayed(const Duration(milliseconds: 200));
+      // Set text
+      final ok = await FlutterAccessibilityService.performAction(
+          editableNode, NodeAction.actionSetText, text);
+      if (ok) {
+        debugPrint('[AppControl] typed "$text" into ${editableNode.nodeId}');
+        return {'ok': true, 'message': 'Typed "$text"'};
+      }
+      return {'ok': false, 'error': 'Could not type text — field may be read-only'};
+    } catch (e) {
+      debugPrint('[AppControl] typeText error: $e');
+      return {'ok': false, 'error': 'Error typing text: $e'};
+    }
+  }
+
   Future<Map<String, dynamic>> toolGetForegroundApp(dynamic args) async {
     if (!Platform.isAndroid) {
       return {'ok': false, 'error': 'App control is only supported on Android'};
@@ -362,6 +552,7 @@ class AppControlService {
     }
     startListening();
     await _ensureEvents();
+    _evictStalePackages();
 
     final pkg = foregroundPackage;
     debugPrint('[AppControl] GET_FOREGROUND: pkg=$pkg '
