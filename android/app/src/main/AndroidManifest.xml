@@ -86,5 +86,13 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Required for getLaunchIntentForPackage() to see installed apps
+             on Android 11+ (Package Visibility / API 30+).
+             Declaring the MAIN+LAUNCHER intent grants visibility to all
+             apps that have a launcher activity. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent>
     </queries>
 </manifest>
