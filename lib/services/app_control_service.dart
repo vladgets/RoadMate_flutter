@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:android_intent_plus/android_intent.dart';
-import 'package:android_intent_plus/flag.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_accessibility_service/accessibility_event.dart';
 import 'package:flutter_accessibility_service/constants.dart';
@@ -445,20 +445,16 @@ class AppControlService {
     }
 
     try {
-      final intent = AndroidIntent(
-        action: 'android.intent.action.MAIN',
-        package: pkg,
-        flags: <int>[
-          Flag.FLAG_ACTIVITY_NEW_TASK,
-          Flag.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED,
-        ],
-      );
-      await intent.launch();
-      debugPrint('[AppControl] Launched $appName ($pkg)');
-      return {'ok': true, 'message': 'Opened $appName'};
+      const channel = MethodChannel('app_launcher');
+      final launched = await channel.invokeMethod<bool>('launchApp', {'package': pkg}) ?? false;
+      if (launched) {
+        debugPrint('[AppControl] Launched $appName ($pkg)');
+        return {'ok': true, 'message': 'Opened $appName'};
+      }
+      return {'ok': false, 'error': '$appName does not appear to be installed'};
     } catch (e) {
       debugPrint('[AppControl] launch error: $e');
-      return {'ok': false, 'error': 'Could not open $appName. Is it installed?'};
+      return {'ok': false, 'error': 'Could not open $appName: $e'};
     }
   }
 
