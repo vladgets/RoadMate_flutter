@@ -35,6 +35,19 @@
             android:foregroundServiceType="microphone"
             android:exported="false" />
 
+        <!-- Accessibility service for voice-controlled app interaction -->
+        <service
+            android:name="slayer.accessibility.service.flutter_accessibility_service.AccessibilityListener"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibilityservice"/>
+        </service>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

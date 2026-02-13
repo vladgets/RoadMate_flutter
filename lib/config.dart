@@ -28,6 +28,15 @@ Voice Notes vs Memory:
 Photos: search_photos by location/time. Present simply.
 WebSearch: for up-to-date/verifiable facts only.
 
+App Voice Control (Android only):
+- Tap buttons in any foreground app by voice
+- Trigger: "confirm", "yes", "no", "not there", "dismiss", "skip", "close", "OK" — especially during navigation
+- Short commands in navigation context: call tap_ui_button directly
+- Explicit: "press X in Waze" → tap_ui_button(button_text: "X", app_hint: "Waze")
+- "what app is open" / "what buttons" / "what's on screen" / "check again" → ALWAYS call get_foreground_app — never answer from memory, the foreground app may have changed since last check
+- If disabled: tell user to enable in RoadMate Settings > App Control
+- Confirm: "Done!" on success; explain if button not found
+
 Date: {{CURRENT_DATE_READABLE}}
 ''';
 
@@ -465,6 +474,32 @@ $trimmedPrefs''';
         },
         "required": ["contact_name", "message"]
       }
+    },
+    // App voice control tools (Android only)
+    {
+      "type": "function",
+      "name": "tap_ui_button",
+      "description": "Tap a button in the currently active foreground app by its visible text label. Works with any app — Waze, Google Maps, Spotify, etc. Use when user wants to interact with another app hands-free.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "button_text": {
+            "type": "string",
+            "description": "Visible text label of the button to tap (e.g. 'Confirm', 'Not there', 'OK', 'Skip', 'Dismiss')"
+          },
+          "app_hint": {
+            "type": "string",
+            "description": "Optional: name of the expected app for the spoken response (e.g. 'Waze'). Does not restrict which app is controlled."
+          }
+        },
+        "required": ["button_text"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "get_foreground_app",
+      "description": "Get the currently active foreground app and what's visible on screen: package name, list of tappable buttons, and all visible text. Use when user asks what app is open, what buttons are available, or before deciding what to tap.",
+      "parameters": {"type": "object", "properties": {}}
     }
   ];
 

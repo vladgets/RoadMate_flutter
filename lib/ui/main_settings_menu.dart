@@ -3,6 +3,7 @@ import 'memory_settings_screen.dart';
 import 'reminders_screen.dart';
 import 'developer_area_menu.dart';
 import 'app_configuration_screen.dart';
+import 'app_control_settings_screen.dart';
 
 
 class SettingsScreen extends StatefulWidget {
@@ -73,6 +74,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const RemindersScreen()),
+              );
+            },
+          ),
+          // App voice control
+          ListTile(
+            leading: const Icon(Icons.accessibility_new),
+            title: const Text('App Control'),
+            subtitle: const Text('Tap buttons in any app by voice'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AppControlSettingsScreen()),
               );
             },
           ),
