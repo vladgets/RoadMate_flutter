@@ -447,7 +447,6 @@ class AppControlService {
     try {
       final intent = AndroidIntent(
         action: 'android.intent.action.MAIN',
-        category: 'android.intent.category.LAUNCHER',
         package: pkg,
         flags: <int>[
           Flag.FLAG_ACTIVITY_NEW_TASK,
