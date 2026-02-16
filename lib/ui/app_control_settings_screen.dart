@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../services/app_control_service.dart';
@@ -14,20 +13,16 @@ class _AppControlSettingsScreenState extends State<AppControlSettingsScreen>
     with WidgetsBindingObserver {
   bool _accessibilityEnabled = false;
   bool _loading = true;
-  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkStatus();
-    // Poll every 3 seconds while screen is open so the toggle stays accurate.
-    _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) => _checkStatus());
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
