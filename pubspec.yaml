@@ -35,7 +35,8 @@ dependencies:
   gal: ^2.3.0
   wakelock_plus: ^1.2.11
   flutter_foreground_task: ^8.16.0
-  flutter_accessibility_service: ^0.3.0
+  flutter_accessibility_service:
+    path: packages/flutter_accessibility_service
 
 dev_dependencies:
   flutter_test:

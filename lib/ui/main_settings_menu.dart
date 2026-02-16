@@ -77,6 +77,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
+          
+          const Divider(),
+
           // App voice control
           ListTile(
             leading: const Icon(Icons.accessibility_new),
@@ -89,7 +92,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
-          const Divider(),
 
           ListTile(
             leading: const Icon(Icons.developer_mode),

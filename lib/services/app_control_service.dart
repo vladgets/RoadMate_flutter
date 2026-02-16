@@ -13,6 +13,84 @@ class AppControlService {
 
   StreamSubscription<AccessibilityEvent>? _sub;
 
+  // ── Voice trigger EventChannel (Quick Settings tile) ───────────────────────
+
+  static const _voiceTriggerChannel =
+      EventChannel('roadmate/accessibility_button');
+
+  StreamSubscription<dynamic>? _buttonSub;
+  VoidCallback? _onVoiceStart;
+  VoidCallback? _onVoiceStop;
+
+  /// Start listening for voice trigger events from the Quick Settings tile.
+  /// [onStart] is called when the tile is tapped while inactive (start voice).
+  /// [onStop] is called when the tile is tapped while active (stop voice).
+  /// Safe to call multiple times — re-entrant calls are ignored.
+  void startListeningForButtonEvents(VoidCallback onStart, {VoidCallback? onStop}) {
+    _onVoiceStart = onStart;
+    _onVoiceStop = onStop;
+    _startButtonChannel();
+  }
+
+  void _startButtonChannel() {
+    if (!Platform.isAndroid) return;
+    if (_buttonSub != null) return;
+    debugPrint('[AppControl] opening voice trigger EventChannel');
+    try {
+      _buttonSub = _voiceTriggerChannel
+          .receiveBroadcastStream()
+          .listen(
+        (event) {
+          debugPrint('[AppControl] voice trigger event: $event');
+          if (event == 'double_tap') {
+            _onVoiceStart?.call();
+          } else if (event == 'stop_voice') {
+            _onVoiceStop?.call();
+          }
+        },
+        onError: (e) => debugPrint('[AppControl] voice trigger error: $e'),
+        onDone: () {
+          debugPrint('[AppControl] voice trigger stream closed — will re-subscribe on next call');
+          _buttonSub = null;
+        },
+      );
+      debugPrint('[AppControl] voice trigger EventChannel subscribed');
+    } catch (e) {
+      debugPrint('[AppControl] voice trigger open error: $e');
+    }
+  }
+
+  // ── Background navigation ───────────────────────────────────────────────────
+
+  static const _navigationChannel = MethodChannel('roadmate/navigation');
+
+  /// Sends the app to the background without finishing the Activity.
+  static Future<void> moveToBackground() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _navigationChannel.invokeMethod<void>('moveToBackground');
+    } catch (e) {
+      debugPrint('[AppControl] moveToBackground error: $e');
+    }
+  }
+
+  // ── QS tile state ───────────────────────────────────────────────────────────
+
+  static const _tileChannel = MethodChannel('roadmate/tile');
+
+  /// Tells the Quick Settings tile whether voice is currently active.
+  /// The tile updates its visual state (selected/unselected) and toggles
+  /// between start/stop on the next tap.
+  static Future<void> setTileActive(bool active) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _tileChannel.invokeMethod<void>('setActive', {'active': active});
+      debugPrint('[AppControl] setTileActive: $active');
+    } catch (e) {
+      debugPrint('[AppControl] setTileActive error: $e');
+    }
+  }
+
   // ── Storage ────────────────────────────────────────────────────────────────
 
   /// When each package last received typeWindowStateChanged (focus signal).
