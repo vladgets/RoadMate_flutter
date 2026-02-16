@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../services/app_control_service.dart';
@@ -13,24 +14,29 @@ class _AppControlSettingsScreenState extends State<AppControlSettingsScreen>
     with WidgetsBindingObserver {
   bool _accessibilityEnabled = false;
   bool _loading = true;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkStatus();
+    // Poll every 3 seconds while screen is open so the toggle stays accurate.
+    _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) => _checkStatus());
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  // Re-check status when app resumes (user may have toggled accessibility)
+  // Re-check only on resumed — not on inactive, which fires during brief
+  // interruptions (notification shade, screen dim) and causes false negatives.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.resumed) {
       _checkStatus();
     }
   }
