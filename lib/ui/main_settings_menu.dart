@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'memory_settings_screen.dart';
 import 'reminders_screen.dart';
 import 'voice_memories_screen.dart';
+import 'whatsapp_settings_screen.dart';
 import 'developer_area_menu.dart';
 import 'app_configuration_screen.dart';
 import 'app_control_settings_screen.dart';
@@ -87,6 +88,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const VoiceMemoriesScreen()),
+              );
+            },
+          ),
+          // WhatsApp Auto-Send
+          ListTile(
+            leading: const Icon(Icons.send_outlined),
+            title: const Text('WhatsApp Auto-Send'),
+            subtitle: const Text('Pair account for automatic messaging'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const WhatsAppSettingsScreen()),
               );
             },
           ),
