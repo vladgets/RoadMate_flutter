@@ -8,7 +8,7 @@ RoadMate automatically detects when you start and stop driving — no manual int
 2. Logs a timestamped event (GPS + address) to a local store
 3. Makes the history queryable via the `get_driving_log` voice tool
 
-Detection works while the app is in the background via a persistent Android foreground service.
+Detection is **best-effort**: it works as long as the app process is alive in the background. The process is not kept alive by a persistent foreground service, so aggressive Android OEMs (Samsung, Xiaomi, etc.) may kill it over time.
 
 ---
 
@@ -46,7 +46,7 @@ Device motion → ActivityRecognition API → DrivingMonitorService
 
 ## Architecture
 
-### New Files
+### Key Files
 
 #### `lib/services/driving_log_store.dart`
 - `DrivingEvent` — model with `id`, `type` ('start'|'park'), `timestamp` (ISO8601 UTC), `lat?`, `lon?`, `address?`
@@ -64,36 +64,54 @@ Device motion → ActivityRecognition API → DrivingMonitorService
 - Notification IDs: 9001 (trip start), 9002 (parked)
 - Notification body format: `"Trip started at Market St, San Francisco • 9:31 AM"`
 
+#### `lib/ui/driving_log_screen.dart`
+- Developer screen: Settings → Developer → Driving Log
+- Lists all events newest-first with icon, label, time, address
+- Tap row or map icon → opens Maps app pinned to that location
+- AppBar has Refresh and Clear buttons
+
 ### Modified Files
 
 | File | Change |
 |------|--------|
 | `pubspec.yaml` | Added `activity_recognition_flutter: ^6.0.0` |
-| `AndroidManifest.xml` | Added `ACTIVITY_RECOGNITION`, `FOREGROUND_SERVICE_LOCATION` permissions; FGS type changed to `microphone\|location` |
+| `AndroidManifest.xml` | Added `ACTIVITY_RECOGNITION`, `FOREGROUND_SERVICE_LOCATION` permissions |
 | `ios/Runner/Info.plist` | Added `NSMotionUsageDescription`; added `location` to `UIBackgroundModes` |
-| `lib/main.dart` | Init driving log + monitor at startup; persistent FGS; updated start/stop FGS methods; notification Stop button wiring; `get_driving_log` tool entry |
+| `lib/main.dart` | Init driving log + monitor at startup; `get_driving_log` tool entry |
 | `lib/config.dart` | Added `get_driving_log` tool schema |
+| `lib/ui/developer_area_menu.dart` | Added Driving Log entry |
 
 ---
 
-## Persistent Foreground Service
+## Background Detection Reliability
 
-The foreground service now starts at **app launch** (not only during voice mode), keeping the process alive for activity recognition callbacks in the background.
+The monitor subscribes to the activity stream when the app launches and keeps running as long as the process is alive. There is **no persistent foreground service** for driving detection — that would require a permanent notification icon in the Android status bar, which is undesirable UX.
 
-### Notification States
+### Practical expectations
 
-| App State | Notification Text |
-|-----------|-------------------|
-| Idle / background | "RoadMate — Running in background" |
-| Voice mode active | "RoadMate Voice Assistant — Voice mode is active" + Stop button |
+| Scenario | Detection works? |
+|----------|-----------------|
+| App recently used, phone has free RAM | ✅ Yes |
+| 10–30 min after backgrounding on Pixel | ✅ Likely |
+| 10–30 min on Samsung (default battery settings) | ⚠️ Maybe |
+| Phone locked overnight | ❌ Process likely killed |
+| User force-stopped the app | ❌ No |
 
-### Why not stop the service after voice mode?
+### Foreground service and notification icon
 
-Stopping the service would kill the process on many Android devices, ending activity recognition. `_stopForegroundService()` now calls `updateService()` to revert the notification rather than `stopService()`.
+The foreground service (FGS) is only active **during voice mode**:
 
-### Boot persistence
+| App State | FGS | Notification icon |
+|-----------|-----|-------------------|
+| Idle / background | ❌ Not running | No icon |
+| Voice mode active | ✅ Running | Icon visible + "Stop" button |
 
-`autoRunOnBoot: true` — if the device restarts, the foreground service (and driving monitor) automatically resumes.
+This means driving detection notifications only appear if the process happens to be alive at the moment of detection. If you want guaranteed detection at the cost of a permanent notification icon, a persistent FGS can be re-enabled (one-line change in `main.dart`).
+
+### Future improvement options
+
+- **Android**: `ActivityRecognitionClient` with `PendingIntent` + manifest-declared `BroadcastReceiver` — delivers updates even when the app process is killed, no FGS required. Needs native platform channel code.
+- **iOS**: `CLLocationManager` significant-change monitoring — wakes the app silently for large location changes even when killed. No notification icon ever required on iOS.
 
 ---
 
@@ -136,19 +154,21 @@ Response shape:
 ### Android
 - Requires `ACTIVITY_RECOGNITION` permission (Android 10+ / API 29+) — requested at runtime on `DrivingMonitorService.start()`
 - `com.google.android.gms.permission.ACTIVITY_RECOGNITION` also declared for older GMS builds
-- `FOREGROUND_SERVICE_LOCATION` required for geolocator calls from within the FGS context on Android 14+
+- `FOREGROUND_SERVICE_LOCATION` declared for geolocator calls if a FGS is ever re-enabled
 
 ### iOS
 - Uses CoreMotion (`CMMotionActivityManager`) via `activity_recognition_flutter`
 - `NSMotionUsageDescription` in `Info.plist` for permission prompt
-- `location` background mode enables background location access for GPS logging
+- `location` in `UIBackgroundModes` enables background location access for GPS logging
+- No persistent notification required — iOS handles background work without FGS
 
 ---
 
 ## Testing on a Physical Device
 
 1. Grant **Physical Activity** / **Motion & Fitness** permission when prompted
-2. Drive for 2+ minutes → "Trip started" notification appears + event logged
-3. Park and walk away → "You parked" notification appears + event logged
-4. Minimize app → detection continues (persistent FGS)
-5. Ask voice: *"where did I park last?"* → AI calls `get_driving_log`, reads address and time
+2. Keep the app recently active (don't force-stop it)
+3. Drive for 2+ minutes → "Trip started" notification appears + event logged
+4. Park and walk away → "You parked" notification appears + event logged
+5. Check Settings → Developer → Driving Log to verify events with location
+6. Ask voice: *"where did I park last?"* → AI calls `get_driving_log`, reads address and time
