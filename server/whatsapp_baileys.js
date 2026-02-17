@@ -67,14 +67,14 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
   };
   sessions.set(clientId, state);
 
-  // Timeout: if no QR or connection after 40s, surface an error.
+  // Timeout: if no QR/code/connection after 60s, surface an error.
   const timeoutHandle = setTimeout(() => {
-    if (state.connecting && !state.connected && !state.qrBase64) {
+    if (state.connecting && !state.connected && !state.qrBase64 && !state.pairingCode) {
       state.connecting = false;
-      state.lastError = 'Timed out waiting for WhatsApp QR. Check Render logs and retry.';
-      console.error(`[WhatsApp] Timeout waiting for QR for client ${clientId}`);
+      state.lastError = 'Timed out. Check Render logs and retry.';
+      console.error(`[WhatsApp] Connection timeout for client ${clientId}`);
     }
-  }, 40_000);
+  }, 60_000);
 
   let resolvedPairingCode = null;
 
@@ -102,17 +102,23 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
 
     socket.ev.on('creds.update', saveCreds);
 
-    // If pairing-code mode: request code immediately before QR is emitted.
+    // If pairing-code mode: request code immediately — BEFORE any connection.update
+    // events fire (i.e. before QR mode begins). No fixed delay; the internal
+    // requestPairingCode call handles its own timing with WA servers.
     if (pairingPhone) {
+      console.log(`[WhatsApp] Requesting pairing code for ${clientId}, phone=${pairingPhone}, registered=${socket.authState.creds.registered}`);
       try {
-        // Give the socket ~1.5s to open the WS channel, but don't wait for QR.
-        await new Promise(r => setTimeout(r, 1500));
         const raw = await socket.requestPairingCode(pairingPhone);
-        resolvedPairingCode = raw?.replace(/(.{4})(.{4})/, '$1-$2') ?? raw;
+        console.log(`[WhatsApp] Raw pairing code for ${clientId}: "${raw}"`);
+        // Only format if it looks like 8 plain chars; otherwise keep as-is.
+        resolvedPairingCode = (raw && raw.length === 8 && !raw.includes('-'))
+          ? `${raw.slice(0, 4)}-${raw.slice(4)}`
+          : (raw ?? null);
         state.pairingCode = resolvedPairingCode;
-        console.log(`[WhatsApp] Pairing code for ${clientId}: ${resolvedPairingCode}`);
+        clearTimeout(timeoutHandle);
+        console.log(`[WhatsApp] Formatted pairing code for ${clientId}: ${resolvedPairingCode}`);
       } catch (e) {
-        console.error(`[WhatsApp] requestPairingCode failed for ${clientId}:`, e.message);
+        console.error(`[WhatsApp] requestPairingCode failed for ${clientId}:`, e.message, e.stack);
         state.lastError = `Pairing code error: ${e.message}`;
         state.connecting = false;
       }
