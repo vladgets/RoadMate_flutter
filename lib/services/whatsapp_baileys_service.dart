@@ -100,9 +100,10 @@ class WhatsAppBaileysService {
             headers: _headers,
             body: jsonEncode({'client_id': id, 'phone': phone}),
           )
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 40));
       final body = jsonDecode(res.body) as Map<String, dynamic>;
       if (body['ok'] == true) return body['pairingCode'] as String?;
+      debugPrint('[WA-Baileys] requestPairingCode server error: ${body['error']}');
       return null;
     } catch (e) {
       debugPrint('[WA-Baileys] requestPairingCode error: $e');

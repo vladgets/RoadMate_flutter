@@ -40,11 +40,20 @@ function sessionDir(clientId) {
   return dir;
 }
 
-async function createSession(clientId) {
+/**
+ * Create (or recreate) a Baileys socket for clientId.
+ * When pairingPhone is set, the socket skips QR and calls requestPairingCode immediately.
+ * Returns { state, pairingCode? } — pairingCode is set only when pairingPhone was given.
+ */
+async function createSession(clientId, { pairingPhone = null, clearAuth = false } = {}) {
   // Tear down any existing socket cleanly.
   const prev = sessions.get(clientId);
   if (prev?.socket) {
     try { prev.socket.end(undefined); } catch (_) {}
+  }
+
+  if (clearAuth) {
+    try { fs.rmSync(sessionDir(clientId), { recursive: true, force: true }); } catch (_) {}
   }
 
   const state = {
@@ -66,6 +75,8 @@ async function createSession(clientId) {
       console.error(`[WhatsApp] Timeout waiting for QR for client ${clientId}`);
     }
   }, 40_000);
+
+  let resolvedPairingCode = null;
 
   try {
     const baileys = await getBaileys();
@@ -90,6 +101,22 @@ async function createSession(clientId) {
     state.socket = socket;
 
     socket.ev.on('creds.update', saveCreds);
+
+    // If pairing-code mode: request code immediately before QR is emitted.
+    if (pairingPhone) {
+      try {
+        // Give the socket ~1.5s to open the WS channel, but don't wait for QR.
+        await new Promise(r => setTimeout(r, 1500));
+        const raw = await socket.requestPairingCode(pairingPhone);
+        resolvedPairingCode = raw?.replace(/(.{4})(.{4})/, '$1-$2') ?? raw;
+        state.pairingCode = resolvedPairingCode;
+        console.log(`[WhatsApp] Pairing code for ${clientId}: ${resolvedPairingCode}`);
+      } catch (e) {
+        console.error(`[WhatsApp] requestPairingCode failed for ${clientId}:`, e.message);
+        state.lastError = `Pairing code error: ${e.message}`;
+        state.connecting = false;
+      }
+    }
 
     socket.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
@@ -136,7 +163,7 @@ async function createSession(clientId) {
         } else {
           console.log(`[WhatsApp] Client ${clientId} disconnected (code ${statusCode}), reconnecting...`);
           state.connecting = true;
-          setTimeout(() => createSession(clientId).catch((e) => {
+          setTimeout(() => createSessionCompat(clientId).catch((e) => {
             state.connecting = false;
             state.lastError = e.message;
           }), 3000);
@@ -151,7 +178,13 @@ async function createSession(clientId) {
     state.lastError = e.message;
   }
 
-  return state;
+  return { state, pairingCode: resolvedPairingCode };
+}
+
+// Backwards-compat wrapper used by restoreSessions and /connect.
+async function createSessionCompat(clientId, opts = {}) {
+  const result = await createSession(clientId, opts);
+  return result?.state ?? result; // old callers expected state object directly
 }
 
 /** On server startup, restore sessions that have saved credentials. */
@@ -161,7 +194,7 @@ async function restoreSessions() {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     console.log(`[WhatsApp] Restoring session for client ${entry.name}...`);
-    createSession(entry.name).catch(console.error);
+    createSessionCompat(entry.name).catch(console.error);
   }
 }
 
@@ -200,13 +233,13 @@ export function registerWhatsAppBaileysRoutes(app) {
       return res.json({ ok: true, already_connected: true, phone: existing.phone });
     }
 
-    createSession(client_id).catch(console.error);
+    createSessionCompat(client_id).catch(console.error);
     return res.json({ ok: true, message: 'Connecting — poll /whatsapp/status for QR.' });
   });
 
   // ── POST /whatsapp/pairing-code ──────────────────────────────────────────
-  // Request a text pairing code instead of QR — ideal when WhatsApp is on
-  // the same device. Must be called after /connect has started the session.
+  // Start a FRESH session and request a pairing code immediately, before any
+  // QR handshake can begin.  This is the correct flow for same-device linking.
   app.post('/whatsapp/pairing-code', async (req, res) => {
     const { client_id, phone } = req.body ?? {};
     if (!client_id || !phone) {
@@ -218,35 +251,29 @@ export function registerWhatsAppBaileysRoutes(app) {
       return res.status(400).json({ ok: false, error: 'Invalid phone number' });
     }
 
-    let s = sessions.get(client_id);
-    // Start session if not already started.
-    if (!s) {
-      s = await createSession(client_id);
-    }
-
-    if (s.connected) {
-      return res.json({ ok: true, already_connected: true, phone: s.phone });
-    }
-
-    // Wait up to 8 seconds for socket to be ready before requesting code.
-    for (let i = 0; i < 16; i++) {
-      if (s.socket) break;
-      await new Promise(r => setTimeout(r, 500));
-    }
-
-    if (!s.socket) {
-      return res.status(500).json({ ok: false, error: s.lastError ?? 'Socket not ready' });
+    // If already connected, no need to pair.
+    const existing = sessions.get(client_id);
+    if (existing?.connected) {
+      return res.json({ ok: true, already_connected: true, phone: existing.phone });
     }
 
     try {
-      const code = await s.socket.requestPairingCode(digits);
-      // Format as XXXX-XXXX for readability.
-      const formatted = code?.replace(/(.{4})(.{4})/, '$1-$2') ?? code;
-      s.pairingCode = formatted;
-      console.log(`[WhatsApp] Pairing code for ${client_id}: ${formatted}`);
-      return res.json({ ok: true, pairingCode: formatted });
+      // Clear any stale session/auth so the socket starts fresh in pairing mode.
+      const { state, pairingCode } = await createSession(client_id, {
+        pairingPhone: digits,
+        clearAuth: true,
+      });
+
+      if (!pairingCode) {
+        return res.status(500).json({
+          ok: false,
+          error: state.lastError ?? 'Failed to get pairing code',
+        });
+      }
+
+      return res.json({ ok: true, pairingCode });
     } catch (e) {
-      console.error(`[WhatsApp] requestPairingCode failed:`, e.message);
+      console.error(`[WhatsApp] /pairing-code error:`, e.message);
       return res.status(500).json({ ok: false, error: e.message });
     }
   });

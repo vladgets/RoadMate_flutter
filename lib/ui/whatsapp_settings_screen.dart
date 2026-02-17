@@ -84,13 +84,9 @@ class _WhatsAppSettingsScreenState extends State<WhatsAppSettingsScreen> {
       _pairingError = null;
     });
 
-    // Start session first (connect), then request code.
-    await WhatsAppBaileysService.instance.connect();
+    // Server creates a fresh socket and requests the code immediately
+    // (before any QR handshake begins). No pre-connect needed.
     _startPolling();
-
-    // Give socket a moment to initialize before requesting the code.
-    await Future.delayed(const Duration(seconds: 3));
-
     final code = await WhatsAppBaileysService.instance.requestPairingCode(phone);
     if (!mounted) return;
 
