@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'memory_settings_screen.dart';
 import 'reminders_screen.dart';
+import 'voice_memories_screen.dart';
 import 'developer_area_menu.dart';
 import 'app_configuration_screen.dart';
 import 'app_control_settings_screen.dart';
@@ -77,7 +78,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
-          
+          // Voice Notes
+          ListTile(
+            leading: const Icon(Icons.mic_none_outlined),
+            title: const Text('Voice Notes'),
+            subtitle: const Text('Browse saved voice notes'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const VoiceMemoriesScreen()),
+              );
+            },
+          ),
+
           const Divider(),
 
           // App voice control
