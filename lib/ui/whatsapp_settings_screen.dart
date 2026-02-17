@@ -84,21 +84,22 @@ class _WhatsAppSettingsScreenState extends State<WhatsAppSettingsScreen> {
       _pairingError = null;
     });
 
-    // Server creates a fresh socket and requests the code immediately
-    // (before any QR handshake begins). No pre-connect needed.
     _startPolling();
-    final code = await WhatsAppBaileysService.instance.requestPairingCode(phone);
-    if (!mounted) return;
-
-    setState(() {
-      _requestingCode = false;
-      if (code != null) {
+    try {
+      final code = await WhatsAppBaileysService.instance.requestPairingCode(phone);
+      if (!mounted) return;
+      setState(() {
+        _requestingCode = false;
         _pairingCode = code;
         _pairingError = null;
-      } else {
-        _pairingError = 'Failed to get pairing code. Check the phone number and try again.';
-      }
-    });
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _requestingCode = false;
+        _pairingError = e.toString();
+      });
+    }
   }
 
   Future<void> _disconnect() async {

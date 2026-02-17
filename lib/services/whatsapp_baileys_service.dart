@@ -91,7 +91,8 @@ class WhatsAppBaileysService {
   /// Request a text pairing code as an alternative to QR scanning.
   /// [phone] must be in international format, digits only (e.g. "15551234567").
   /// Returns the code (e.g. "ABCD-EFGH") or null on failure.
-  Future<String?> requestPairingCode(String phone) async {
+  /// Returns the pairing code on success, or throws a [String] error message on failure.
+  Future<String> requestPairingCode(String phone) async {
     try {
       final id = await _clientId();
       final res = await http
@@ -102,12 +103,13 @@ class WhatsAppBaileysService {
           )
           .timeout(const Duration(seconds: 40));
       final body = jsonDecode(res.body) as Map<String, dynamic>;
-      if (body['ok'] == true) return body['pairingCode'] as String?;
-      debugPrint('[WA-Baileys] requestPairingCode server error: ${body['error']}');
-      return null;
+      if (body['ok'] == true) return body['pairingCode'] as String;
+      throw body['error'] as String? ?? 'Failed to get pairing code';
+    } on String {
+      rethrow;
     } catch (e) {
       debugPrint('[WA-Baileys] requestPairingCode error: $e');
-      return null;
+      throw 'Could not reach server. Check your connection.';
     }
   }
 

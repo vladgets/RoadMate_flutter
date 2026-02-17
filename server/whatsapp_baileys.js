@@ -160,6 +160,17 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
 
     // Request pairing code AFTER listeners are registered (so we don't miss events).
     if (pairingPhone) {
+      // Wait for the noise-protocol handshake to complete before sending the
+      // pairing-code request. We listen for the first connection.update event
+      // (which fires once the WS channel is open), with a 5s fallback.
+      await new Promise(resolve => {
+        let done = false;
+        const fallback = setTimeout(() => { if (!done) { done = true; resolve(); } }, 5000);
+        socket.ev.on('connection.update', () => {
+          if (!done) { done = true; clearTimeout(fallback); resolve(); }
+        });
+      });
+
       console.log(`[WhatsApp] Requesting pairing code for ${clientId}, phone=${pairingPhone}, registered=${socket.authState.creds.registered}`);
       try {
         const raw = await socket.requestPairingCode(pairingPhone);
@@ -271,9 +282,12 @@ export function registerWhatsAppBaileysRoutes(app) {
       });
 
       if (!pairingCode) {
-        return res.status(500).json({
+        const isRateLimit = state.lastError?.includes('Connection Closed');
+        return res.status(isRateLimit ? 429 : 500).json({
           ok: false,
-          error: state.lastError ?? 'Failed to get pairing code',
+          error: isRateLimit
+            ? 'WhatsApp has rate-limited this number due to too many attempts. Wait 1–2 hours then try again.'
+            : (state.lastError ?? 'Failed to get pairing code'),
         });
       }
 
