@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'youtube_history_screen.dart';
+import 'driving_log_screen.dart';
 import '../services/photo_index_service.dart';
 import '../services/youtube_client.dart';
 import '../config.dart';
@@ -45,6 +46,18 @@ class _SettingsScreenState extends State<DeveloperAreaScreen> {
       ),
       body: ListView(
         children: [
+          ListTile(
+            leading: const Icon(Icons.directions_car_outlined),
+            title: const Text('Driving Log'),
+            subtitle: const Text('Trip start/stop events with location'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const DrivingLogScreen()),
+              );
+            },
+          ),
+          const Divider(),
           ListTile(
             leading: const Icon(Icons.video_library),
             title: const Text('YouTube history'),

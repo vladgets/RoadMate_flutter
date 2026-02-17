@@ -27,6 +27,8 @@ import 'services/photo_index_service.dart';
 import 'services/voice_memory_store.dart';
 import 'services/whatsapp_service.dart';
 import 'services/app_control_service.dart';
+import 'services/driving_log_store.dart';
+import 'services/driving_monitor_service.dart';
 import 'ui/voice_memories_screen.dart';
 
 
@@ -49,7 +51,7 @@ Future<void> main() async {
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
       eventAction: ForegroundTaskEventAction.nothing(),
-      autoRunOnBoot: false,
+      autoRunOnBoot: true,
       autoRunOnMyPackageReplaced: false,
       allowWakeLock: true,
       allowWifiLock: false,
@@ -68,6 +70,20 @@ Future<void> main() async {
 
   // Initialize voice memory store
   await VoiceMemoryStore.instance.init();
+
+  // Initialize driving log store and start background activity monitoring
+  await DrivingLogStore.instance.init();
+  await DrivingMonitorService.instance.start();
+
+  // Start persistent foreground service for background detection
+  if (!(await FlutterForegroundTask.isRunningService)) {
+    await FlutterForegroundTask.startService(
+      serviceId: 256,
+      notificationTitle: 'RoadMate',
+      notificationText: 'Running in background',
+      callback: startCallback,
+    );
+  }
 
   // Auto-start accessibility listener if already enabled
   if (await AppControlService.instance.isAccessibilityEnabled()) {
@@ -108,7 +124,7 @@ class VoiceForegroundTaskHandler extends TaskHandler {
   void onNotificationButtonPressed(String id) {
     // Handle notification button presses (e.g., "Stop" button)
     if (id == 'stop') {
-      FlutterForegroundTask.stopService();
+      FlutterForegroundTask.sendDataToMain({'action': 'stopVoice'});
     }
   }
 
@@ -214,6 +230,13 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Listen for messages from foreground task handler (e.g. notification "Stop" button)
+    FlutterForegroundTask.addTaskDataCallback((data) {
+      if (data is Map && data['action'] == 'stopVoice') {
+        _disconnect();
+      }
+    });
 
     // Pre-load thinking sound for instant playback
     _preloadThinkingSound();
@@ -553,27 +576,42 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     }
   }
 
-  /// Start foreground service to keep microphone active when screen is locked
+  /// Update foreground service notification for voice mode.
+  /// If service is already running (driving monitor), update the notification.
+  /// Otherwise start the service fresh.
   Future<void> _startForegroundService() async {
     if (await FlutterForegroundTask.isRunningService) {
-      return; // Already running
+      // Service already running (driving monitor) — update notification for voice mode
+      await FlutterForegroundTask.updateService(
+        notificationTitle: 'RoadMate Voice Assistant',
+        notificationText: 'Voice mode is active',
+        notificationButtons: [
+          const NotificationButton(id: 'stop', text: 'Stop'),
+        ],
+      );
+    } else {
+      await FlutterForegroundTask.startService(
+        serviceId: 256,
+        notificationTitle: 'RoadMate Voice Assistant',
+        notificationText: 'Voice mode is active',
+        notificationButtons: [
+          const NotificationButton(id: 'stop', text: 'Stop'),
+        ],
+        callback: startCallback,
+      );
     }
-
-    await FlutterForegroundTask.startService(
-      serviceId: 256,
-      notificationTitle: 'RoadMate Voice Assistant',
-      notificationText: 'Voice mode is active',
-      notificationButtons: [
-        const NotificationButton(id: 'stop', text: 'Stop'),
-      ],
-      callback: startCallback,
-    );
   }
 
-  /// Stop foreground service
+  /// Revert foreground service notification back to monitoring mode.
+  /// Do NOT stop the service — keep it alive for driving detection.
   Future<void> _stopForegroundService() async {
     if (await FlutterForegroundTask.isRunningService) {
-      await FlutterForegroundTask.stopService();
+      // Revert to monitoring notification — do NOT stop service
+      await FlutterForegroundTask.updateService(
+        notificationTitle: 'RoadMate',
+        notificationText: 'Running in background',
+        notificationButtons: [],
+      );
     }
   }
 
@@ -749,6 +787,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   },
   'type_text': (args) async {
     return await AppControlService.instance.toolTypeText(args);
+  },
+  // Driving log tool
+  'get_driving_log': (args) async {
+    return await DrivingLogStore.instance.toolGetDrivingLog(args);
   },
 };
 

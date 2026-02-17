@@ -518,7 +518,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "type_text",
-      "description": "Type text into an editable text field in the currently active foreground app. Use when user says 'type X', 'enter X', 'write X in the search box', 'fill in my email', etc.",
+      "description": "Type text into an editable text field in the currently active foreground app.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -528,10 +528,24 @@ $trimmedPrefs''';
           },
           "field_hint": {
             "type": "string",
-            "description": "Optional: hint to identify which field to type in, e.g. 'search', 'email', 'message'. Leave empty to use the first available editable field."
+            "description": "Optional: hint to identify which field to type in."
           }
         },
         "required": ["text"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "get_driving_log",
+      "description": "Get recent driving events (trip starts and parks) with location and time. Use when the user asks about recent drives, where they parked, or trip history.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of events to return (default 10, max 50)."
+          }
+        }
       }
     }
   ];
