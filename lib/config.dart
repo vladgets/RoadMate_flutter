@@ -28,6 +28,13 @@ Voice Notes vs Memory:
 Photos: search_photos by location/time. Present simply.
 WebSearch: for up-to-date/verifiable facts only.
 
+Reminders:
+- One-shot: "Remind me at 3pm to call dentist" → reminder_create with text + when_iso
+- Daily: "Remind me every morning at 7am to drink water" → recurrence='daily'
+- Weekly: "Remind me every Monday at 8am" → recurrence='weekly', day_of_week=1
+- AI content: "Send me an inspiring quote every day at 6am" → recurrence='daily', ai_prompt='inspiring quote, 1-2 sentences', text='Morning quote'
+- AI + style: "Inspiring quote every Monday at 8am in style of Jensen Huang" → recurrence='weekly', day_of_week=1, ai_prompt='inspiring quote in style of Jensen Huang, 1-2 sentences', text='Monday inspiration'
+
 App Voice Control (Android only):
 - Tap: "confirm", "yes", "no", "dismiss", "skip", "close" → tap_ui_button
 - Launch: "open Spotify", "launch Waze", "start Google Maps" → launch_app
@@ -315,20 +322,33 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "reminder_create",
-      "description": "Create reminder with notification.",
+      "description": "Create a reminder with a local notification. Supports one-shot, recurring (daily/weekly), and AI-generated content. For recurring: set recurrence='daily' or 'weekly' (+ day_of_week for weekly). For AI-generated content: set ai_prompt with the instruction; text becomes a short label.",
       "parameters": {
         "type": "object",
         "properties": {
           "text": {
             "type": "string",
-            "description": "What to remind the user about."
+            "description": "What to remind the user about. For AI reminders, this is a short human-readable label (e.g. 'Morning inspiration')."
           },
           "when_iso": {
             "type": "string",
-            "description": "Local date/time in ISO 8601 format, e.g. 2026-01-28T18:30:00"
+            "description": "Local date/time in ISO 8601 format, e.g. 2026-01-28T07:00:00. For recurring reminders this sets the time-of-day."
+          },
+          "recurrence": {
+            "type": "string",
+            "enum": ["daily", "weekly"],
+            "description": "How often to repeat. Omit for a one-time reminder."
+          },
+          "day_of_week": {
+            "type": "integer",
+            "description": "Day of week for weekly recurrence: 1=Monday, 2=Tuesday, ..., 7=Sunday."
+          },
+          "ai_prompt": {
+            "type": "string",
+            "description": "If provided, AI generates the notification content at fire time using this instruction. Example: 'inspiring quote in style of Jensen Huang, 1-2 sentences'. Android only; iOS falls back to text label."
           }
         },
-        "required": ["text", "when_iso"]
+        "required": ["when_iso"]
       },
     },
     {

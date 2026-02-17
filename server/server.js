@@ -167,4 +167,37 @@ app.post("/chat", async (req, res) => {
 });
 
 
+// AI content generation endpoint (for AI-generated reminder notifications)
+app.post("/generate", async (req, res) => {
+  try {
+    const { prompt } = req.body ?? {};
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({ ok: false, error: "Missing required field: prompt" });
+    }
+
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 150,
+      }),
+    });
+
+    const data = await r.json();
+    if (!r.ok) {
+      return res.status(r.status).json({ ok: false, error: data?.error?.message || "OpenAI error" });
+    }
+
+    const content = data?.choices?.[0]?.message?.content ?? "";
+    return res.status(200).json({ ok: true, content });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+});
+
 app.listen(3000, () => console.log("Token server on :3000"));

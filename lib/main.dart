@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -8,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:workmanager/workmanager.dart';
 import 'config.dart';
 import 'ui/main_settings_menu.dart';
 import 'ui/onboarding_screen.dart';
@@ -32,9 +35,147 @@ import 'services/driving_monitor_service.dart';
 import 'ui/voice_memories_screen.dart';
 
 
+// ---------------------------------------------------------------------------
+// WorkManager background task dispatcher (must be a top-level function).
+// Handles AI-generated reminder notifications when the app is in background.
+// ---------------------------------------------------------------------------
+
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((taskName, inputData) async {
+    WidgetsFlutterBinding.ensureInitialized();
+    if (taskName == 'ai_reminder') {
+      await _handleAiReminderTask(inputData ?? {});
+    }
+    return true;
+  });
+}
+
+/// Generates AI content and shows a notification, then reschedules if recurring.
+Future<void> _handleAiReminderTask(Map<String, dynamic> inputData) async {
+  try {
+    final reminderId = (inputData['reminder_id'] as num?)?.toInt() ?? 0;
+    final recurrence = (inputData['recurrence'] as String?) ?? '';
+    final dayOfWeek = (inputData['day_of_week'] as num?)?.toInt() ?? 0;
+    final scheduledIso = (inputData['scheduled_iso'] as String?) ?? '';
+    final label = (inputData['text'] as String?) ?? 'Reminder';
+    final aiPrompt = (inputData['ai_prompt'] as String?) ?? '';
+
+    if (reminderId == 0) return;
+
+    // Check if reminder is still scheduled (not canceled by user).
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('roadmate_reminders_v1');
+    bool isCanceled = false;
+    if (raw != null && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw) as List?;
+        if (decoded != null) {
+          for (final item in decoded) {
+            if (item is Map && (item['id'] as num?)?.toInt() == reminderId) {
+              isCanceled = (item['status'] as String?) == 'canceled';
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+    if (isCanceled) return;
+
+    // Generate AI notification body.
+    String notificationBody = label;
+    if (aiPrompt.isNotEmpty) {
+      try {
+        final response = await http.post(
+          Uri.parse('${_serverUrl()}/generate'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'prompt': aiPrompt}),
+        ).timeout(const Duration(seconds: 20));
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          final content = (data['content'] as String?)?.trim() ?? '';
+          if (content.isNotEmpty) notificationBody = content;
+        }
+      } catch (e) {
+        debugPrint('[AiReminder] Failed to generate content: $e');
+      }
+    }
+
+    // Show notification.
+    final notifications = FlutterLocalNotificationsPlugin();
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    await notifications.initialize(
+      const InitializationSettings(android: androidInit),
+    );
+
+    await notifications.show(
+      reminderId,
+      label,
+      notificationBody,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'roadmate_reminders',
+          'Reminders',
+          channelDescription: 'RoadMate scheduled reminders',
+          importance: Importance.max,
+          priority: Priority.high,
+        ),
+      ),
+      payload: jsonEncode({'reminder_id': reminderId}),
+    );
+
+    // Reschedule for next occurrence if recurring.
+    if (recurrence.isNotEmpty && scheduledIso.isNotEmpty) {
+      try {
+        final scheduledLocal = DateTime.parse(scheduledIso);
+        final h = scheduledLocal.hour;
+        final m = scheduledLocal.minute;
+        final now = DateTime.now();
+
+        DateTime nextOccurrence;
+        if (recurrence == 'daily') {
+          var next = DateTime(now.year, now.month, now.day, h, m);
+          if (!next.isAfter(now)) next = next.add(const Duration(days: 1));
+          nextOccurrence = next;
+        } else {
+          // weekly
+          final target = dayOfWeek > 0 ? dayOfWeek : scheduledLocal.weekday;
+          var next = DateTime(now.year, now.month, now.day, h, m);
+          while (next.weekday != target || !next.isAfter(now)) {
+            next = next.add(const Duration(days: 1));
+          }
+          nextOccurrence = next;
+        }
+
+        final delay = nextOccurrence.difference(now);
+        await Workmanager().registerOneOffTask(
+          'ai_reminder_$reminderId',
+          'ai_reminder',
+          initialDelay: delay.isNegative ? Duration.zero : delay,
+          inputData: inputData,
+          constraints: Constraints(networkType: NetworkType.connected),
+          existingWorkPolicy: ExistingWorkPolicy.replace,
+        );
+        debugPrint('[AiReminder] Rescheduled id=$reminderId in ${delay.inMinutes}m');
+      } catch (e) {
+        debugPrint('[AiReminder] Failed to reschedule: $e');
+      }
+    }
+  } catch (e) {
+    debugPrint('[AiReminder] Task error: $e');
+  }
+}
+
+String _serverUrl() => 'https://roadmate-flutter.onrender.com';
+
 /// Main entry point (keets app in portrait mode only)
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize WorkManager for AI-generated reminder background tasks (Android only).
+  if (Platform.isAndroid) {
+    await Workmanager().initialize(callbackDispatcher);
+  }
 
   // Initialize foreground service for voice mode
   FlutterForegroundTask.init(

@@ -1,11 +1,13 @@
 // lib/services/reminders_service.dart
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:workmanager/workmanager.dart';
 
 /// Simple Reminder model.
 class Reminder {
@@ -15,13 +17,17 @@ class Reminder {
     required this.scheduledAtLocalIso,
     required this.createdAtLocalIso,
     this.status = ReminderStatus.scheduled,
+    this.recurrence,
+    this.dayOfWeek,
+    this.aiPrompt,
   });
 
   final int id;
+
+  /// Display text / label. For AI reminders this is just a human-readable label.
   final String text;
 
   /// ISO8601 string in *local time* (no timezone offset baked in).
-  /// We store local ISO to keep UI predictable and to allow conversion via tz later.
   final String scheduledAtLocalIso;
 
   /// ISO8601 local timestamp for bookkeeping.
@@ -29,16 +35,31 @@ class Reminder {
 
   ReminderStatus status;
 
+  /// Recurrence: null = one-shot, 'daily' = every day, 'weekly' = same weekday.
+  final String? recurrence;
+
+  /// Day of week for weekly recurrence: 1=Monday … 7=Sunday (matches DateTime.weekday).
+  final int? dayOfWeek;
+
+  /// If set, AI generates the notification body at fire time using this instruction.
+  final String? aiPrompt;
+
   DateTime get scheduledAtLocal => DateTime.parse(scheduledAtLocalIso);
   DateTime get createdAtLocal => DateTime.parse(createdAtLocalIso);
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'text': text,
-        'scheduledAtLocalIso': scheduledAtLocalIso,
-        'createdAtLocalIso': createdAtLocalIso,
-        'status': status.name,
-      };
+  Map<String, dynamic> toJson() {
+    final m = <String, dynamic>{
+      'id': id,
+      'text': text,
+      'scheduledAtLocalIso': scheduledAtLocalIso,
+      'createdAtLocalIso': createdAtLocalIso,
+      'status': status.name,
+    };
+    if (recurrence != null) m['recurrence'] = recurrence;
+    if (dayOfWeek != null) m['dayOfWeek'] = dayOfWeek;
+    if (aiPrompt != null) m['aiPrompt'] = aiPrompt;
+    return m;
+  }
 
   static Reminder fromJson(Map<String, dynamic> json) {
     final statusStr = (json['status'] ?? 'scheduled').toString();
@@ -53,16 +74,43 @@ class Reminder {
       scheduledAtLocalIso: (json['scheduledAtLocalIso'] ?? '').toString(),
       createdAtLocalIso: (json['createdAtLocalIso'] ?? '').toString(),
       status: status,
+      recurrence: json['recurrence'] as String?,
+      dayOfWeek: (json['dayOfWeek'] as num?)?.toInt(),
+      aiPrompt: json['aiPrompt'] as String?,
     );
   }
 }
 
 enum ReminderStatus { scheduled, fired, canceled }
 
+/// Computes the next fire time for a reminder (handles recurrence).
+DateTime computeNextOccurrence(Reminder r) {
+  if (r.recurrence == null) return r.scheduledAtLocal;
+  final now = DateTime.now();
+  final h = r.scheduledAtLocal.hour;
+  final m = r.scheduledAtLocal.minute;
+
+  if (r.recurrence == 'daily') {
+    var next = DateTime(now.year, now.month, now.day, h, m);
+    if (!next.isAfter(now)) next = next.add(const Duration(days: 1));
+    return next;
+  } else {
+    // weekly
+    final target = r.dayOfWeek ?? r.scheduledAtLocal.weekday;
+    var next = DateTime(now.year, now.month, now.day, h, m);
+    while (next.weekday != target || !next.isAfter(now)) {
+      next = next.add(const Duration(days: 1));
+    }
+    return next;
+  }
+}
+
 /// RoadMate local reminders service:
 /// - Stores reminders in SharedPreferences
 /// - Schedules local notifications using flutter_local_notifications
 /// - Uses timezone package to schedule correctly with DST changes
+/// - Supports recurring reminders (daily/weekly)
+/// - Supports AI-generated notification content via WorkManager (Android only)
 class RemindersService {
   RemindersService._();
 
@@ -84,17 +132,14 @@ class RemindersService {
     tz_data.initializeTimeZones();
 
     // IMPORTANT: tz.local defaults to UTC unless we set it.
-    // If tz.local is UTC but the user provides local wall-clock time, scheduling can end up in the past.
     if (!_tzConfigured) {
       try {
         final tzInfo = await FlutterTimezone.getLocalTimezone();
         final String tzName = tzInfo.identifier;
         tz.setLocalLocation(tz.getLocation(tzName));
         debugPrint('[Reminders] Local timezone set to $tzName');
-        debugPrint('[Reminders] tz.local is now: ${tz.local.name}');
       } catch (e) {
-        // Fallback: keep tz.local as-is; scheduling may be off but app won't crash.
-        debugPrint('[Reminders] Failed to set local timezone, using default tz.local. Error: $e');
+        debugPrint('[Reminders] Failed to set local timezone: $e');
       }
       _tzConfigured = true;
     }
@@ -113,7 +158,6 @@ class RemindersService {
 
     await _notifications.initialize(
       initSettings,
-      // Optional: handle notification taps (deep-link to reminders screen)
       onDidReceiveNotificationResponse: (resp) {
         debugPrint('[Reminders] Notification tapped: ${resp.payload}');
       },
@@ -127,7 +171,9 @@ class RemindersService {
       importance: Importance.max,
     );
 
-    final androidPlugin = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    final androidPlugin = _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
     if (androidPlugin != null) {
       await androidPlugin.createNotificationChannel(androidChannel);
     }
@@ -139,9 +185,6 @@ class RemindersService {
   Future<void> scheduleReminderInOneMinute(String text) async {
     await init();
 
-    // await _notifications.cancelAll();
-
-    // Request permission (best-effort) so notifications can show.
     final permsOk = await requestPermissions();
     debugPrint('[Test] Permissions granted: $permsOk');
 
@@ -153,19 +196,19 @@ class RemindersService {
       debugPrint('[Test] Test reminder created successfully');
     } catch (e, st) {
       debugPrint('[Test] Failed to schedule test reminder: $e\n$st');
-      rethrow; // if you want to propagate the error to UI
+      rethrow;
     }
   }
 
   /// Request notification permissions.
-  /// Returns true if permissions appear granted.
   Future<bool> requestPermissions() async {
     await init();
 
     bool ok = true;
 
-    // iOS/macOS permissions
-    final ios = _notifications.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+    final ios = _notifications
+        .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>();
     if (ios != null) {
       final granted = await ios.requestPermissions(
         alert: true,
@@ -175,24 +218,11 @@ class RemindersService {
       ok = ok && (granted ?? false);
     }
 
-    // Android 13+ runtime notification permission
-    // final androidPlugin = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    // if (androidPlugin != null) {
-    //   // This is the critical check for Android 13+
-    //   final bool? canScheduleExact = await androidPlugin.canScheduleExactNotifications();
-    //   if (canScheduleExact == false) {
-    //     // This will open the system settings page for "Alarms & Reminders"
-    //     // The user MUST toggle this on for your scheduled notifications to work.
-    //     await androidPlugin.requestExactAlarmsPermission(); 
-    //     return false; 
-    //   }
-    // }
-
-    final androidGranted =
-        await _notifications
+    final androidGranted = await _notifications
             .resolvePlatformSpecificImplementation<
                 AndroidFlutterLocalNotificationsPlugin>()
-            ?.requestNotificationsPermission() ?? true;
+            ?.requestNotificationsPermission() ??
+        true;
 
     ok = ok && androidGranted;
 
@@ -202,10 +232,16 @@ class RemindersService {
   /// Create + schedule a reminder notification.
   ///
   /// [whenLocal] should be a DateTime in the user's local time.
+  /// [recurrence]: null = one-shot, 'daily', or 'weekly'.
+  /// [dayOfWeek]: 1=Mon..7=Sun for weekly recurrence.
+  /// [aiPrompt]: if set, WorkManager will generate notification body at fire time (Android only).
   /// Returns the created Reminder.
   Future<Reminder> createReminder({
     required String text,
     required DateTime whenLocal,
+    String? recurrence,
+    int? dayOfWeek,
+    String? aiPrompt,
   }) async {
     await init();
 
@@ -218,6 +254,9 @@ class RemindersService {
       scheduledAtLocalIso: _toLocalIso(whenLocal),
       createdAtLocalIso: _toLocalIso(now),
       status: ReminderStatus.scheduled,
+      recurrence: recurrence,
+      dayOfWeek: dayOfWeek,
+      aiPrompt: aiPrompt,
     );
 
     // Persist first, but avoid duplicates for the same id.
@@ -226,10 +265,15 @@ class RemindersService {
     all.add(reminder);
     await _saveAll(all);
 
-    // Schedule notification. If scheduling fails, roll back the persisted reminder
-    // so repeated attempts don't create multiple entries.
+    // Schedule notification. If scheduling fails, roll back.
     try {
-      await _scheduleNotification(reminder);
+      if (aiPrompt != null && Platform.isAndroid) {
+        // AI reminders on Android: use WorkManager to generate content at fire time.
+        await _scheduleAiReminder(reminder);
+      } else {
+        // Regular or iOS AI reminder: use flutter_local_notifications.
+        await _scheduleNotification(reminder);
+      }
     } catch (e) {
       debugPrint('[Reminders] Failed to schedule notification: $e');
       final rollback = await _loadAll();
@@ -241,11 +285,21 @@ class RemindersService {
     return reminder;
   }
 
-  /// Cancel a reminder (also cancels the underlying scheduled notification).
+  /// Cancel a reminder (also cancels the underlying scheduled notification/task).
   Future<void> cancelReminder(int id) async {
     await init();
 
+    // Cancel flutter_local_notifications (covers regular + iOS AI reminders)
     await _notifications.cancel(id);
+
+    // Cancel WorkManager task (covers Android AI reminders)
+    if (Platform.isAndroid) {
+      try {
+        await Workmanager().cancelByUniqueName('ai_reminder_$id');
+      } catch (_) {
+        // WorkManager may not have a task for this id; ignore.
+      }
+    }
 
     final all = await _loadAll();
     for (final r in all) {
@@ -256,7 +310,7 @@ class RemindersService {
     await _saveAll(all);
   }
 
-  /// Returns upcoming reminders (scheduledAt >= now and status == scheduled).
+  /// Returns upcoming reminders (status == scheduled, in the future or recurring).
   Future<List<Reminder>> listUpcoming() async {
     final all = await _loadAll();
     final now = DateTime.now();
@@ -264,11 +318,43 @@ class RemindersService {
     final upcoming = all
         .where((r) =>
             r.status == ReminderStatus.scheduled &&
-            r.scheduledAtLocal.isAfter(now))
+            (r.recurrence != null || r.scheduledAtLocal.isAfter(now)))
         .toList();
 
-    upcoming.sort((a, b) => a.scheduledAtLocal.compareTo(b.scheduledAtLocal));
+    upcoming.sort(
+        (a, b) => computeNextOccurrence(a).compareTo(computeNextOccurrence(b)));
     return upcoming;
+  }
+
+  /// Update only the display text/label of a reminder.
+  /// Re-schedules the notification so the new text appears in the notification.
+  Future<void> updateReminderText(int id, String newText) async {
+    await init();
+    final all = await _loadAll();
+    final idx = all.indexWhere((r) => r.id == id);
+    if (idx < 0) return;
+
+    final old = all[idx];
+    final updated = Reminder(
+      id: old.id,
+      text: newText.trim(),
+      scheduledAtLocalIso: old.scheduledAtLocalIso,
+      createdAtLocalIso: old.createdAtLocalIso,
+      status: old.status,
+      recurrence: old.recurrence,
+      dayOfWeek: old.dayOfWeek,
+      aiPrompt: old.aiPrompt,
+    );
+    all[idx] = updated;
+    await _saveAll(all);
+
+    // Re-schedule so the updated label takes effect.
+    if (old.aiPrompt != null && Platform.isAndroid) {
+      await _scheduleAiReminder(updated);
+    } else {
+      await _notifications.cancel(id);
+      await _scheduleNotification(updated);
+    }
   }
 
   /// Returns all reminders including canceled/fired.
@@ -285,7 +371,6 @@ class RemindersService {
 
     final kept = all.where((r) {
       if (r.status == ReminderStatus.scheduled) return true;
-      // Keep fired/canceled only for a while for audit/debug UX.
       return r.scheduledAtLocal.isAfter(cutoff);
     }).toList();
 
@@ -297,17 +382,13 @@ class RemindersService {
   // -----------------------
 
   int _makeId(DateTime whenLocal) {
-    // Use milliseconds for uniqueness but constrain to 32-bit signed int range.
-    // This matches what many notification systems expect.
     final ms = whenLocal.millisecondsSinceEpoch;
-    final id = ms % 2147483647; // 2^31-1
+    final id = ms % 2147483647;
     return id == 0 ? 1 : id;
   }
 
   String _toLocalIso(DateTime dt) {
     final local = dt.toLocal();
-    // No offset stored; parse later as local.
-    // ISO8601 without timezone offset:
     return DateTime(
       local.year,
       local.month,
@@ -321,7 +402,6 @@ class RemindersService {
   }
 
   Future<void> _scheduleNotification(Reminder r) async {
-    // Convert local DateTime -> tz.TZDateTime in local location.
     final localLocation = tz.local;
     final scheduledLocal = r.scheduledAtLocal;
 
@@ -337,7 +417,7 @@ class RemindersService {
       scheduledLocal.microsecond,
     );
 
-    // Guard: some platforms/plugins reject scheduling at or before "now".
+    // Guard: some platforms reject scheduling at or before "now".
     final nowTz = tz.TZDateTime.now(localLocation);
     if (!tzWhen.isAfter(nowTz)) {
       tzWhen = nowTz.add(const Duration(seconds: 5));
@@ -362,35 +442,55 @@ class RemindersService {
       iOS: iosDetails,
     );
 
-    Future<void> scheduleWithMode(AndroidScheduleMode mode) async {
-      await _notifications.zonedSchedule(
-        r.id,
-        'Reminder',
-        r.text,
-        tzWhen,
-        details,
-        payload: jsonEncode({'reminder_id': r.id}),
-        androidScheduleMode: mode,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        // MatchDateTimeComponents is for repeating schedules; keep null for one-shot.
-        matchDateTimeComponents: null,
-      );
+    // Determine repeat component for recurring reminders.
+    DateTimeComponents? matchComponents;
+    if (r.recurrence == 'daily') {
+      matchComponents = DateTimeComponents.time;
+    } else if (r.recurrence == 'weekly') {
+      matchComponents = DateTimeComponents.dayOfWeekAndTime;
     }
 
-    // Use inexact alarms to avoid Android 12+ exact-alarm permission friction.
-    await scheduleWithMode(AndroidScheduleMode.inexactAllowWhileIdle);
-    // await scheduleWithMode(AndroidScheduleMode.exactAllowWhileIdle);
+    await _notifications.zonedSchedule(
+      r.id,
+      'Reminder',
+      r.text,
+      tzWhen,
+      details,
+      payload: jsonEncode({'reminder_id': r.id}),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: matchComponents,
+    );
 
-
-    // Log pending internal queue
     final pending = await _notifications.pendingNotificationRequests();
     debugPrint('[Reminders] Pending notifications count: ${pending.length}');
-    for (final p in pending) {
-      debugPrint('[Reminders] Pending: id=${p.id}, title=${p.title}, body=${p.body}');
-    }
+    debugPrint('[Reminders] Scheduled id=${r.id} at ${r.scheduledAtLocalIso}'
+        '${r.recurrence != null ? " (${r.recurrence})" : ""}');
+  }
 
-    debugPrint('[Reminders] Scheduled id=${r.id} at ${r.scheduledAtLocalIso}');
+  /// Schedule an AI-generated reminder via WorkManager (Android only).
+  Future<void> _scheduleAiReminder(Reminder r) async {
+    final delay = computeNextOccurrence(r).difference(DateTime.now());
+
+    await Workmanager().registerOneOffTask(
+      'ai_reminder_${r.id}',
+      'ai_reminder',
+      initialDelay: delay.isNegative ? Duration.zero : delay,
+      inputData: {
+        'reminder_id': r.id,
+        'recurrence': r.recurrence ?? '',
+        'day_of_week': r.dayOfWeek ?? 0,
+        'scheduled_iso': r.scheduledAtLocalIso,
+        'text': r.text,
+        'ai_prompt': r.aiPrompt ?? '',
+      },
+      constraints: Constraints(networkType: NetworkType.connected),
+      existingWorkPolicy: ExistingWorkPolicy.replace,
+    );
+
+    debugPrint('[Reminders] AI reminder WorkManager task scheduled: id=${r.id}'
+        ' delay=${delay.inMinutes}m');
   }
 
   Future<List<Reminder>> _loadAll() async {
@@ -418,19 +518,13 @@ class RemindersService {
     await prefs.setString(_prefsKey, encoded);
   }
 
-
   // -----------------------
   // Tool handlers (for Realtime function calls)
   // -----------------------
 
   /// Tool: reminder_create
-  /// Expected args:
-  /// {
-  ///   "text": "Call dentist",
-  ///   "when_iso": "2026-01-28T18:30:00"   // local time ISO8601 (recommended)
-  /// }
-  /// Optional args:
-  /// - "request_permissions": true/false (default true)
+  /// Required args: when_iso (local ISO8601)
+  /// Optional args: text, recurrence, day_of_week, ai_prompt, request_permissions
   Future<Map<String, dynamic>> toolCreate(dynamic args) async {
     await init();
 
@@ -449,16 +543,21 @@ class RemindersService {
 
     final text = (a['text'] ?? a['message'] ?? '').toString().trim();
     final whenIso = (a['when_iso'] ?? a['when'] ?? '').toString().trim();
+    final recurrence = (a['recurrence'] as String?)?.trim();
+    final dayOfWeek = (a['day_of_week'] as num?)?.toInt();
+    final aiPrompt = (a['ai_prompt'] as String?)?.trim();
     final requestPerms = a['request_permissions'] == null
         ? true
         : (a['request_permissions'] == true);
 
-    if (text.isEmpty) {
-      throw Exception('reminder_create: missing "text"');
-    }
     if (whenIso.isEmpty) {
       throw Exception('reminder_create: missing "when_iso"');
     }
+
+    // text is the label; for AI reminders it can be auto-generated
+    final label = text.isNotEmpty
+        ? text
+        : (aiPrompt != null ? 'AI Reminder' : 'Reminder');
 
     // Ask for notification permission if needed (best-effort).
     if (requestPerms) {
@@ -472,14 +571,24 @@ class RemindersService {
     }
 
     final whenLocal = DateTime.parse(whenIso).toLocal();
-    if (!whenLocal.isAfter(DateTime.now())) {
+
+    // For one-shot reminders, must be in the future.
+    // For recurring, the next occurrence will be computed automatically.
+    if (recurrence == null && !whenLocal.isAfter(DateTime.now())) {
       return {
         'ok': false,
         'error': 'Reminder time must be in the future.',
       };
     }
 
-    final r = await createReminder(text: text, whenLocal: whenLocal);
+    final r = await createReminder(
+      text: label,
+      whenLocal: whenLocal,
+      recurrence: recurrence,
+      dayOfWeek: dayOfWeek,
+      aiPrompt: aiPrompt,
+    );
+
     return {
       'ok': true,
       'reminder': r.toJson(),

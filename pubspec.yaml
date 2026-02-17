@@ -38,6 +38,7 @@ dependencies:
   activity_recognition_flutter: ^6.0.0
   flutter_accessibility_service:
     path: packages/flutter_accessibility_service
+  workmanager: ^0.9.0
 
 dev_dependencies:
   flutter_test:
