@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/voice_memory.dart';
 import '../services/voice_memory_store.dart';
 
@@ -135,34 +137,48 @@ class _VoiceMemoriesScreenState extends State<VoiceMemoriesScreen> {
                   ),
                 ],
               ),
-              if (memory.address != null) ...[
+              if (memory.address != null || (memory.latitude != null && memory.longitude != null)) ...[
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.location_on_outlined, size: 16, color: Colors.grey.shade600),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        memory.address!,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade600,
+                GestureDetector(
+                  onTap: (memory.latitude != null && memory.longitude != null)
+                      ? () => _openInMaps(memory.latitude!, memory.longitude!, memory.address)
+                      : null,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.location_on,
+                        size: 16,
+                        color: (memory.latitude != null && memory.longitude != null)
+                            ? Colors.blue.shade600
+                            : Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (memory.address != null)
+                              Text(
+                                memory.address!,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: (memory.latitude != null && memory.longitude != null)
+                                      ? Colors.blue.shade600
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                            if (memory.latitude != null && memory.longitude != null)
+                              Text(
+                                '${memory.latitude!.toStringAsFixed(4)}, ${memory.longitude!.toStringAsFixed(4)}  •  tap to open map',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue.shade400,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
-              if (memory.latitude != null && memory.longitude != null) ...[
-                const SizedBox(height: 4),
-                Padding(
-                  padding: const EdgeInsets.only(left: 22),
-                  child: Text(
-                    '${memory.latitude!.toStringAsFixed(4)}, ${memory.longitude!.toStringAsFixed(4)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade400,
-                    ),
+                    ],
                   ),
                 ),
               ],
@@ -221,31 +237,15 @@ class _VoiceMemoriesScreenState extends State<VoiceMemoriesScreen> {
     );
   }
 
-  String _formatRelativeTime(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 60) return 'Just now';
-    if (diff.inMinutes < 60) {
-      final m = diff.inMinutes;
-      return '$m ${m == 1 ? 'minute' : 'minutes'} ago';
+  Future<void> _openInMaps(double lat, double lon, String? label) async {
+    final encodedLabel = Uri.encodeComponent(label ?? 'Note location');
+    final Uri uri;
+    if (Platform.isIOS) {
+      uri = Uri.parse('http://maps.apple.com/?ll=$lat,$lon&q=$encodedLabel');
+    } else {
+      uri = Uri.parse('geo:$lat,$lon?q=$lat,$lon($encodedLabel)');
     }
-    if (diff.inHours < 24) {
-      final h = diff.inHours;
-      return '$h ${h == 1 ? 'hour' : 'hours'} ago';
-    }
-    if (diff.inDays < 7) {
-      final d = diff.inDays;
-      return '$d ${d == 1 ? 'day' : 'days'} ago';
-    }
-    if (diff.inDays < 30) {
-      final w = diff.inDays ~/ 7;
-      return '$w ${w == 1 ? 'week' : 'weeks'} ago';
-    }
-    if (diff.inDays < 365) {
-      final m = diff.inDays ~/ 30;
-      return '$m ${m == 1 ? 'month' : 'months'} ago';
-    }
-    final y = diff.inDays ~/ 365;
-    return '$y ${y == 1 ? 'year' : 'years'} ago';
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   String _formatDateTime(DateTime dt) {
@@ -335,10 +335,13 @@ class _VoiceMemoriesScreenState extends State<VoiceMemoriesScreen> {
                           final memory = _filtered[index];
                           return _MemoryListItem(
                             memory: memory,
-                            relativeTime: _formatRelativeTime(memory.createdAt),
+                            formattedTime: _formatDateTime(memory.createdAt),
                             onTap: () => _showDetail(memory),
                             onDelete: () => _deleteMemory(memory),
                             onConfirmDelete: () => _confirmDelete(context),
+                            onLocationTap: (memory.latitude != null && memory.longitude != null)
+                                ? () => _openInMaps(memory.latitude!, memory.longitude!, memory.address)
+                                : null,
                           );
                         },
                       ),
@@ -356,17 +359,19 @@ class _VoiceMemoriesScreenState extends State<VoiceMemoriesScreen> {
 
 class _MemoryListItem extends StatelessWidget {
   final VoiceMemory memory;
-  final String relativeTime;
+  final String formattedTime;
   final VoidCallback onTap;
   final VoidCallback onDelete;
   final Future<bool?> Function() onConfirmDelete;
+  final VoidCallback? onLocationTap;
 
   const _MemoryListItem({
     required this.memory,
-    required this.relativeTime,
+    required this.formattedTime,
     required this.onTap,
     required this.onDelete,
     required this.onConfirmDelete,
+    this.onLocationTap,
   });
 
   @override
@@ -402,24 +407,34 @@ class _MemoryListItem extends StatelessWidget {
           children: [
             if (memory.address != null) ...[
               const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade500),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      memory.address!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              GestureDetector(
+                onTap: onLocationTap,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.location_on_outlined,
+                      size: 14,
+                      color: onLocationTap != null ? Colors.blue.shade400 : Colors.grey.shade500,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        memory.address!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: onLocationTap != null ? Colors.blue.shade600 : Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
             const SizedBox(height: 4),
             Text(
-              relativeTime,
+              formattedTime,
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
             ),
           ],
