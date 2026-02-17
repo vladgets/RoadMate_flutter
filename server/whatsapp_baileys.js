@@ -57,15 +57,29 @@ async function createSession(clientId) {
   };
   sessions.set(clientId, state);
 
+  // Timeout: if no QR or connection after 40s, surface an error.
+  const timeoutHandle = setTimeout(() => {
+    if (state.connecting && !state.connected && !state.qrBase64) {
+      state.connecting = false;
+      state.lastError = 'Timed out waiting for WhatsApp QR. Check Render logs and retry.';
+      console.error(`[WhatsApp] Timeout waiting for QR for client ${clientId}`);
+    }
+  }, 40_000);
+
   try {
     const baileys = await getBaileys();
     const makeWASocket = baileys.default ?? baileys.makeWASocket;
-    const { useMultiFileAuthState, DisconnectReason } = baileys;
+    const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = baileys;
+
+    // Fetch the current WhatsApp Web version — required or the handshake hangs.
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    console.log(`[WhatsApp] Using WA version ${version.join('.')} (latest: ${isLatest})`);
 
     const dir = sessionDir(clientId);
     const { state: authState, saveCreds } = await useMultiFileAuthState(dir);
 
     const socket = makeWASocket({
+      version,
       auth: authState,
       logger: silentLogger,
       printQRInTerminal: false,
@@ -80,6 +94,7 @@ async function createSession(clientId) {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
+        clearTimeout(timeoutHandle);
         try {
           const dataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 300 });
           state.qrBase64 = dataUrl.split(',')[1];
@@ -93,6 +108,7 @@ async function createSession(clientId) {
       }
 
       if (connection === 'open') {
+        clearTimeout(timeoutHandle);
         state.connected = true;
         state.connecting = false;
         state.qrBase64 = null;
@@ -128,6 +144,7 @@ async function createSession(clientId) {
     });
 
   } catch (e) {
+    clearTimeout(timeoutHandle);
     console.error(`[WhatsApp] createSession failed for ${clientId}:`, e.message);
     state.connecting = false;
     state.lastError = e.message;
