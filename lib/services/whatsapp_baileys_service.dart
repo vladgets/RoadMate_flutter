@@ -10,6 +10,7 @@ class WhatsAppBaileysStatus {
     required this.connected,
     required this.connecting,
     this.qrBase64,
+    this.pairingCode,
     this.phone,
     this.lastError,
   });
@@ -17,9 +18,8 @@ class WhatsAppBaileysStatus {
   final bool connected;
   final bool connecting;
   final String? qrBase64;
+  final String? pairingCode;
   final String? phone;
-
-  /// Non-null when the server encountered an error (e.g. Baileys import failed).
   final String? lastError;
 
   static WhatsAppBaileysStatus disconnected() =>
@@ -30,6 +30,7 @@ class WhatsAppBaileysStatus {
         connected: j['connected'] as bool? ?? false,
         connecting: j['connecting'] as bool? ?? false,
         qrBase64: j['qrBase64'] as String?,
+        pairingCode: j['pairingCode'] as String?,
         phone: j['phone'] as String?,
         lastError: j['lastError'] as String?,
       );
@@ -84,6 +85,28 @@ class WhatsAppBaileysService {
     } catch (e) {
       debugPrint('[WA-Baileys] connect error: $e');
       return false;
+    }
+  }
+
+  /// Request a text pairing code as an alternative to QR scanning.
+  /// [phone] must be in international format, digits only (e.g. "15551234567").
+  /// Returns the code (e.g. "ABCD-EFGH") or null on failure.
+  Future<String?> requestPairingCode(String phone) async {
+    try {
+      final id = await _clientId();
+      final res = await http
+          .post(
+            Uri.parse('$_base/whatsapp/pairing-code'),
+            headers: _headers,
+            body: jsonEncode({'client_id': id, 'phone': phone}),
+          )
+          .timeout(const Duration(seconds: 20));
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (body['ok'] == true) return body['pairingCode'] as String?;
+      return null;
+    } catch (e) {
+      debugPrint('[WA-Baileys] requestPairingCode error: $e');
+      return null;
     }
   }
 

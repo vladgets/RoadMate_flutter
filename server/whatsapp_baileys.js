@@ -52,6 +52,7 @@ async function createSession(clientId) {
     connected: false,
     connecting: true,   // explicit flag, not derived
     qrBase64: null,
+    pairingCode: null,  // 8-char code alternative to QR
     phone: null,
     lastError: null,
   };
@@ -183,6 +184,7 @@ export function registerWhatsAppBaileysRoutes(app) {
       connected: s.connected,
       connecting: s.connecting,
       qrBase64: s.qrBase64 ?? null,
+      pairingCode: s.pairingCode ?? null,
       phone: s.phone ?? null,
       lastError: s.lastError ?? null,
     });
@@ -200,6 +202,53 @@ export function registerWhatsAppBaileysRoutes(app) {
 
     createSession(client_id).catch(console.error);
     return res.json({ ok: true, message: 'Connecting — poll /whatsapp/status for QR.' });
+  });
+
+  // ── POST /whatsapp/pairing-code ──────────────────────────────────────────
+  // Request a text pairing code instead of QR — ideal when WhatsApp is on
+  // the same device. Must be called after /connect has started the session.
+  app.post('/whatsapp/pairing-code', async (req, res) => {
+    const { client_id, phone } = req.body ?? {};
+    if (!client_id || !phone) {
+      return res.status(400).json({ ok: false, error: 'Missing client_id or phone' });
+    }
+
+    const digits = phone.replace(/[^0-9]/g, '');
+    if (digits.length < 7) {
+      return res.status(400).json({ ok: false, error: 'Invalid phone number' });
+    }
+
+    let s = sessions.get(client_id);
+    // Start session if not already started.
+    if (!s) {
+      s = await createSession(client_id);
+    }
+
+    if (s.connected) {
+      return res.json({ ok: true, already_connected: true, phone: s.phone });
+    }
+
+    // Wait up to 8 seconds for socket to be ready before requesting code.
+    for (let i = 0; i < 16; i++) {
+      if (s.socket) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    if (!s.socket) {
+      return res.status(500).json({ ok: false, error: s.lastError ?? 'Socket not ready' });
+    }
+
+    try {
+      const code = await s.socket.requestPairingCode(digits);
+      // Format as XXXX-XXXX for readability.
+      const formatted = code?.replace(/(.{4})(.{4})/, '$1-$2') ?? code;
+      s.pairingCode = formatted;
+      console.log(`[WhatsApp] Pairing code for ${client_id}: ${formatted}`);
+      return res.json({ ok: true, pairingCode: formatted });
+    } catch (e) {
+      console.error(`[WhatsApp] requestPairingCode failed:`, e.message);
+      return res.status(500).json({ ok: false, error: e.message });
+    }
   });
 
   // ── POST /whatsapp/send ──────────────────────────────────────────────────
