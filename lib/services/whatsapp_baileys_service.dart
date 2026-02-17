@@ -11,19 +11,16 @@ class WhatsAppBaileysStatus {
     required this.connecting,
     this.qrBase64,
     this.phone,
+    this.lastError,
   });
 
-  /// True when the session is fully authenticated and ready to send.
   final bool connected;
-
-  /// True while initiating before QR appears.
   final bool connecting;
-
-  /// Base64 PNG of the QR code to scan (null when not needed).
   final String? qrBase64;
-
-  /// The linked WhatsApp phone number (e.g. "15551234567").
   final String? phone;
+
+  /// Non-null when the server encountered an error (e.g. Baileys import failed).
+  final String? lastError;
 
   static WhatsAppBaileysStatus disconnected() =>
       const WhatsAppBaileysStatus(connected: false, connecting: false);
@@ -34,6 +31,7 @@ class WhatsAppBaileysStatus {
         connecting: j['connecting'] as bool? ?? false,
         qrBase64: j['qrBase64'] as String?,
         phone: j['phone'] as String?,
+        lastError: j['lastError'] as String?,
       );
 }
 

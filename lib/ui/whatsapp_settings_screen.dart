@@ -160,7 +160,7 @@ class _WhatsAppSettingsScreenState extends State<WhatsAppSettingsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          if (!hasQr && !isConnecting) ...[
+          if (!hasQr && !isConnecting && _status.lastError == null) ...[
             const SizedBox(height: 8),
             const Text(
               'Pair your WhatsApp account so RoadMate can send messages '
@@ -183,7 +183,45 @@ class _WhatsAppSettingsScreenState extends State<WhatsAppSettingsScreen> {
             ),
           ],
 
-          if (isConnecting && !hasQr) ...[
+          if (_status.lastError != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red.shade400, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _status.lastError!,
+                      style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _actionInProgress ? null : _connect,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF25D366),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
+
+          if (isConnecting && !hasQr && _status.lastError == null) ...[
             const SizedBox(height: 32),
             const CircularProgressIndicator(),
             const SizedBox(height: 16),
