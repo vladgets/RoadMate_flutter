@@ -90,40 +90,21 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
     const dir = sessionDir(clientId);
     const { state: authState, saveCreds } = await useMultiFileAuthState(dir);
 
+    const { Browsers } = baileys;
     const socket = makeWASocket({
       version,
       auth: authState,
       logger: silentLogger,
       printQRInTerminal: false,
-      browser: ['RoadMate', 'Chrome', '120.0.0'],
+      browser: Browsers.ubuntu('Chrome'),
     });
 
     state.socket = socket;
 
     socket.ev.on('creds.update', saveCreds);
 
-    // If pairing-code mode: request code immediately — BEFORE any connection.update
-    // events fire (i.e. before QR mode begins). No fixed delay; the internal
-    // requestPairingCode call handles its own timing with WA servers.
-    if (pairingPhone) {
-      console.log(`[WhatsApp] Requesting pairing code for ${clientId}, phone=${pairingPhone}, registered=${socket.authState.creds.registered}`);
-      try {
-        const raw = await socket.requestPairingCode(pairingPhone);
-        console.log(`[WhatsApp] Raw pairing code for ${clientId}: "${raw}"`);
-        // Only format if it looks like 8 plain chars; otherwise keep as-is.
-        resolvedPairingCode = (raw && raw.length === 8 && !raw.includes('-'))
-          ? `${raw.slice(0, 4)}-${raw.slice(4)}`
-          : (raw ?? null);
-        state.pairingCode = resolvedPairingCode;
-        clearTimeout(timeoutHandle);
-        console.log(`[WhatsApp] Formatted pairing code for ${clientId}: ${resolvedPairingCode}`);
-      } catch (e) {
-        console.error(`[WhatsApp] requestPairingCode failed for ${clientId}:`, e.message, e.stack);
-        state.lastError = `Pairing code error: ${e.message}`;
-        state.connecting = false;
-      }
-    }
-
+    // Register connection.update BEFORE calling requestPairingCode so no events
+    // are missed if they fire during the await.
     socket.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
@@ -176,6 +157,25 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
         }
       }
     });
+
+    // Request pairing code AFTER listeners are registered (so we don't miss events).
+    if (pairingPhone) {
+      console.log(`[WhatsApp] Requesting pairing code for ${clientId}, phone=${pairingPhone}, registered=${socket.authState.creds.registered}`);
+      try {
+        const raw = await socket.requestPairingCode(pairingPhone);
+        console.log(`[WhatsApp] Raw pairing code for ${clientId}: "${raw}"`);
+        resolvedPairingCode = (raw && raw.length === 8 && !raw.includes('-'))
+          ? `${raw.slice(0, 4)}-${raw.slice(4)}`
+          : (raw ?? null);
+        state.pairingCode = resolvedPairingCode;
+        clearTimeout(timeoutHandle);
+        console.log(`[WhatsApp] Formatted pairing code for ${clientId}: ${resolvedPairingCode}`);
+      } catch (e) {
+        console.error(`[WhatsApp] requestPairingCode failed for ${clientId}:`, e.message, e.stack);
+        state.lastError = `Pairing code error: ${e.message}`;
+        state.connecting = false;
+      }
+    }
 
   } catch (e) {
     clearTimeout(timeoutHandle);
