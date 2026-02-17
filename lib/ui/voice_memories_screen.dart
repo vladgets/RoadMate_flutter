@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/voice_memory.dart';
 import '../services/voice_memory_store.dart';
+import 'photo_picker_sheet.dart';
+import 'widgets/photo_thumbnail.dart';
 
 class VoiceMemoriesScreen extends StatefulWidget {
   const VoiceMemoriesScreen({super.key});
@@ -95,104 +97,282 @@ class _VoiceMemoriesScreenState extends State<VoiceMemoriesScreen> {
   }
 
   void _showDetail(VoiceMemory memory) {
+    // State kept outside the builder so it survives setSheetState rebuilds
+    var editing = false;
+    TextEditingController? editController;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (context) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.6,
-        minChildSize: 0.3,
-        maxChildSize: 0.9,
-        builder: (context, scrollController) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: ListView(
-            controller: scrollController,
-            children: [
-              // Drag handle
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              // Date/time
-              Row(
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          // Resolve the latest version of the memory from the store
+          final live = VoiceMemoryStore.instance.allMemories
+              .firstWhere((m) => m.id == memory.id, orElse: () => memory);
+
+          Future<void> attachPhotos() async {
+            final selected = await PhotoPickerSheet.show(
+              context,
+              initialSelected: live.linkedPhotoIds,
+            );
+            if (selected == null) return;
+            await VoiceMemoryStore.instance.linkPhotos(live.id, selected);
+            setSheetState(() {});
+            if (mounted) {
+              setState(() {
+                _memories = VoiceMemoryStore.instance.allMemories;
+                _applyFilter();
+              });
+            }
+          }
+
+          Future<void> removePhoto(String photoId) async {
+            final updated = List<String>.from(live.linkedPhotoIds)..remove(photoId);
+            await VoiceMemoryStore.instance.linkPhotos(live.id, updated);
+            setSheetState(() {});
+            if (mounted) {
+              setState(() {
+                _memories = VoiceMemoryStore.instance.allMemories;
+                _applyFilter();
+              });
+            }
+          }
+
+          void startEdit() {
+            editController = TextEditingController(text: live.transcription);
+            setSheetState(() => editing = true);
+          }
+
+          Future<void> saveEdit() async {
+            final newText = editController?.text.trim() ?? '';
+            if (newText.isEmpty) return;
+            await VoiceMemoryStore.instance.editMemory(live.id, newText);
+            editController?.dispose();
+            editController = null;
+            setSheetState(() => editing = false);
+            if (mounted) {
+              setState(() {
+                _memories = VoiceMemoryStore.instance.allMemories;
+                _applyFilter();
+              });
+            }
+          }
+
+          void cancelEdit() {
+            editController?.dispose();
+            editController = null;
+            setSheetState(() => editing = false);
+          }
+
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.6,
+            minChildSize: 0.3,
+            maxChildSize: 0.9,
+            builder: (context, scrollController) => Padding(
+              padding: const EdgeInsets.all(20),
+              child: ListView(
+                controller: scrollController,
                 children: [
-                  Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 6),
-                  Text(
-                    _formatDateTime(memory.createdAt),
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
+                  // Drag handle
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                ],
-              ),
-              if (memory.address != null || (memory.latitude != null && memory.longitude != null)) ...[
-                const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: (memory.latitude != null && memory.longitude != null)
-                      ? () => _openInMaps(memory.latitude!, memory.longitude!, memory.address)
-                      : null,
-                  child: Row(
+                  // Date/time
+                  Row(
                     children: [
-                      Icon(
-                        Icons.location_on,
-                        size: 16,
-                        color: (memory.latitude != null && memory.longitude != null)
-                            ? Colors.blue.shade600
-                            : Colors.grey.shade600,
-                      ),
+                      Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
                       const SizedBox(width: 6),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (memory.address != null)
-                              Text(
-                                memory.address!,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: (memory.latitude != null && memory.longitude != null)
-                                      ? Colors.blue.shade600
-                                      : Colors.grey.shade600,
-                                ),
-                              ),
-                            if (memory.latitude != null && memory.longitude != null)
-                              Text(
-                                '${memory.latitude!.toStringAsFixed(4)}, ${memory.longitude!.toStringAsFixed(4)}  •  tap to open map',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.blue.shade400,
-                                ),
-                              ),
-                          ],
+                      Text(
+                        _formatDateTime(live.createdAt),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              const Divider(),
-              const SizedBox(height: 16),
-              // Full transcription
-              SelectableText(
-                memory.transcription,
-                style: const TextStyle(fontSize: 16, height: 1.5),
+                  if (live.address != null || (live.latitude != null && live.longitude != null)) ...[
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: (live.latitude != null && live.longitude != null)
+                          ? () => _openInMaps(live.latitude!, live.longitude!, live.address)
+                          : null,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: (live.latitude != null && live.longitude != null)
+                                ? Colors.blue.shade600
+                                : Colors.grey.shade600,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (live.address != null)
+                                  Text(
+                                    live.address!,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: (live.latitude != null && live.longitude != null)
+                                          ? Colors.blue.shade600
+                                          : Colors.grey.shade600,
+                                    ),
+                                  ),
+                                if (live.latitude != null && live.longitude != null)
+                                  Text(
+                                    '${live.latitude!.toStringAsFixed(4)}, ${live.longitude!.toStringAsFixed(4)}  •  tap to open map',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.blue.shade400,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  // Attach photos row
+                  Row(
+                    children: [
+                      Icon(Icons.photo_library_outlined, size: 16, color: Colors.grey.shade600),
+                      const SizedBox(width: 6),
+                      Text(
+                        live.linkedPhotoIds.isEmpty
+                            ? 'No photos attached'
+                            : '${live.linkedPhotoIds.length} photo${live.linkedPhotoIds.length == 1 ? '' : 's'}',
+                        style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: attachPhotos,
+                        icon: const Icon(Icons.add_photo_alternate, size: 18),
+                        label: const Text('Attach'),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Photo thumbnails strip (in detail sheet)
+                  if (live.linkedPhotoIds.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 88,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: live.linkedPhotoIds.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 4),
+                        itemBuilder: (_, i) {
+                          final photoId = live.linkedPhotoIds[i];
+                          return Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              PhotoThumbnail(assetId: photoId, size: 80),
+                              Positioned(
+                                top: -4,
+                                right: 4,
+                                child: GestureDetector(
+                                  onTap: () => removePhoto(photoId),
+                                  child: Container(
+                                    width: 20,
+                                    height: 20,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.black54,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.close, size: 13, color: Colors.white),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  // Transcription header with edit toggle
+                  Row(
+                    children: [
+                      Text(
+                        'Note',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade500,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (!editing)
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 18),
+                          tooltip: 'Edit note',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          onPressed: startEdit,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  // Read or edit view
+                  if (editing) ...[
+                    TextField(
+                      controller: editController,
+                      maxLines: null,
+                      autofocus: true,
+                      style: const TextStyle(fontSize: 16, height: 1.5),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.all(12),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: cancelEdit,
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: saveEdit,
+                          child: const Text('Save'),
+                        ),
+                      ],
+                    ),
+                  ] else
+                    SelectableText(
+                      live.transcription,
+                      style: const TextStyle(fontSize: 16, height: 1.5),
+                    ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -392,55 +572,82 @@ class _MemoryListItem extends StatelessWidget {
       ),
       confirmDismiss: (_) => onConfirmDelete(),
       onDismissed: (_) => onDelete(),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.blue.shade50,
-          child: Icon(Icons.auto_stories, color: Colors.blue.shade700, size: 20),
-        ),
-        title: Text(
-          titleText,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (memory.address != null) ...[
-              const SizedBox(height: 4),
-              GestureDetector(
-                onTap: onLocationTap,
-                child: Row(
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                backgroundColor: Colors.blue.shade50,
+                child: Icon(Icons.auto_stories, color: Colors.blue.shade700, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.location_on_outlined,
-                      size: 14,
-                      color: onLocationTap != null ? Colors.blue.shade400 : Colors.grey.shade500,
+                    Text(
+                      titleText,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14),
                     ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        memory.address!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: onLocationTap != null ? Colors.blue.shade600 : Colors.grey.shade600,
+                    if (memory.address != null) ...[
+                      const SizedBox(height: 4),
+                      GestureDetector(
+                        onTap: onLocationTap,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.location_on_outlined,
+                              size: 14,
+                              color: onLocationTap != null ? Colors.blue.shade400 : Colors.grey.shade500,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                memory.address!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: onLocationTap != null ? Colors.blue.shade600 : Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                    ],
+                    const SizedBox(height: 4),
+                    Text(
+                      formattedTime,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                     ),
+                    // Photo thumbnail strip
+                    if (memory.linkedPhotoIds.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 52,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: memory.linkedPhotoIds.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 4),
+                          itemBuilder: (_, i) => PhotoThumbnail(
+                            assetId: memory.linkedPhotoIds[i],
+                            size: 48,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ],
-            const SizedBox(height: 4),
-            Text(
-              formattedTime,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-            ),
-          ],
+          ),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        onTap: onTap,
       ),
     );
   }

@@ -7,6 +7,7 @@ class VoiceMemory {
   final double? longitude;
   final String? address;
   final int? durationSeconds;
+  final List<String> linkedPhotoIds;
 
   VoiceMemory({
     required this.id,
@@ -16,6 +17,7 @@ class VoiceMemory {
     this.longitude,
     this.address,
     this.durationSeconds,
+    this.linkedPhotoIds = const [],
   });
 
   Map<String, dynamic> toJson() {
@@ -27,6 +29,7 @@ class VoiceMemory {
       'longitude': longitude,
       'address': address,
       'duration_seconds': durationSeconds,
+      'linked_photo_ids': linkedPhotoIds,
     };
   }
 
@@ -39,8 +42,20 @@ class VoiceMemory {
       longitude: json['longitude'] as double?,
       address: json['address'] as String?,
       durationSeconds: json['duration_seconds'] as int?,
+      linkedPhotoIds: List<String>.from(json['linked_photo_ids'] ?? []),
     );
   }
+
+  VoiceMemory copyWith({String? transcription, List<String>? linkedPhotoIds}) => VoiceMemory(
+    id: id,
+    transcription: transcription ?? this.transcription,
+    createdAt: createdAt,
+    latitude: latitude,
+    longitude: longitude,
+    address: address,
+    durationSeconds: durationSeconds,
+    linkedPhotoIds: linkedPhotoIds ?? this.linkedPhotoIds,
+  );
 
   @override
   String toString() {

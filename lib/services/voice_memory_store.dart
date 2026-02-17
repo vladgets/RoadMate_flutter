@@ -84,6 +84,24 @@ class VoiceMemoryStore {
     return memory;
   }
 
+  /// Update the transcription text of a memory
+  Future<void> editMemory(String memoryId, String newTranscription) async {
+    await init();
+    final i = _memories.indexWhere((m) => m.id == memoryId);
+    if (i == -1) return;
+    _memories[i] = _memories[i].copyWith(transcription: newTranscription);
+    await _save();
+  }
+
+  /// Link photo asset IDs to a memory (replaces any existing links)
+  Future<void> linkPhotos(String memoryId, List<String> photoIds) async {
+    await init();
+    final i = _memories.indexWhere((m) => m.id == memoryId);
+    if (i == -1) return;
+    _memories[i] = _memories[i].copyWith(linkedPhotoIds: photoIds);
+    await _save();
+  }
+
   /// Delete a memory by ID
   Future<bool> deleteMemory(String id) async {
     await init();
