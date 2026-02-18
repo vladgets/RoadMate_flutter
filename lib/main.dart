@@ -208,6 +208,7 @@ Future<void> main() async {
   // Initialize photo index service and start background indexing
   await PhotoIndexService.instance.init();
   PhotoIndexService.instance.buildIndexInBackground();
+  PhotoIndexService.instance.startChangeListener();
 
   // Initialize voice memory store
   await VoiceMemoryStore.instance.init();
@@ -878,6 +879,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   // Photo album search tool
   'search_photos': (args) async {
     return await PhotoIndexService.instance.toolSearchPhotos(args);
+  },
+  'rebuild_photo_index': (_) async {
+    final result = await PhotoIndexService.instance.buildIndex(forceRebuild: true);
+    return result;
   },
   // Voice note tools
   'save_voice_note': (args) async {

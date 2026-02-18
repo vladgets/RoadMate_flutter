@@ -422,6 +422,15 @@ $trimmedPrefs''';
         }
       }
     },
+    {
+      "type": "function",
+      "name": "rebuild_photo_index",
+      "description": "Rebuild the photo index from scratch. Use when the user says photos are missing or the index seems outdated.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
     // Voice note tools (separate from memory_append/memory_fetch)
     {
       "type": "function",

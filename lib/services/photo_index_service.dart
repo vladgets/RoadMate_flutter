@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../models/photo_index.dart';
@@ -33,6 +34,9 @@ class PhotoIndexService {
         // ignore: avoid_print
         print('[PhotoIndexService] Sample: ${photo.address ?? "no location"}, ${photo.timestamp?.toString() ?? "no timestamp"}');
       }
+
+      // Check for any new photos taken since the index was last built
+      _checkAndIndexNewPhotos();
     }
   }
 
@@ -414,6 +418,88 @@ class PhotoIndexService {
     }
     // Fire and forget
     buildIndex();
+  }
+
+  /// Start listening for photo library changes (real-time indexing of new photos)
+  Future<void> startChangeListener() async {
+    if (!await hasPermission()) return;
+    await PhotoManager.startChangeNotify();
+    PhotoManager.addChangeCallback(_onPhotoLibraryChanged);
+    // ignore: avoid_print
+    print('[PhotoIndexService] Started photo library change listener');
+  }
+
+  /// Stop listening for photo library changes
+  void stopChangeListener() {
+    PhotoManager.removeChangeCallback(_onPhotoLibraryChanged);
+    PhotoManager.stopChangeNotify();
+  }
+
+  /// Called when the photo library changes (e.g. new photo taken)
+  void _onPhotoLibraryChanged(MethodCall call) {
+    _checkAndIndexNewPhotos();
+  }
+
+  /// Check for photos taken since the last index build and add them incrementally.
+  /// Uses a date filter so it only fetches assets newer than [_index.lastIndexed] —
+  /// fast even for large photo libraries.
+  Future<void> _checkAndIndexNewPhotos() async {
+    if (_isIndexing || _index == null) return;
+
+    final lastIndexed = _index!.lastIndexed;
+    if (lastIndexed == null) return;
+
+    try {
+      // Only fetch photos created after the last index build
+      final filterOption = FilterOptionGroup(
+        createTimeCond: DateTimeCond(
+          min: lastIndexed,
+          max: DateTime.now().add(const Duration(days: 1)),
+        ),
+      );
+
+      final albums = await PhotoManager.getAssetPathList(
+        type: RequestType.image,
+        hasAll: true,
+        filterOption: filterOption,
+      );
+      if (albums.isEmpty) return;
+
+      final allPhotos = albums.firstWhere(
+        (a) => a.isAll,
+        orElse: () => albums.first,
+      );
+
+      final count = await allPhotos.assetCountAsync;
+      if (count == 0) {
+        // ignore: avoid_print
+        print('[PhotoIndexService] No new photos since last index build');
+        return;
+      }
+
+      // ignore: avoid_print
+      print('[PhotoIndexService] Found $count new photo(s) since last index — indexing...');
+
+      final newAssets = await allPhotos.getAssetListRange(start: 0, end: count);
+      int added = 0;
+      for (final asset in newAssets) {
+        // Skip if somehow already indexed
+        if (_index!.photos.any((p) => p.id == asset.id)) continue;
+
+        final metadata = await _extractMetadata(asset);
+        if (metadata != null) {
+          await addPhotoToIndex(metadata);
+          added++;
+        }
+      }
+      if (added > 0) {
+        // ignore: avoid_print
+        print('[PhotoIndexService] Added $added new photo(s) to index');
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[PhotoIndexService] _checkAndIndexNewPhotos error: $e');
+    }
   }
 
   /// Tool handler for search_photos

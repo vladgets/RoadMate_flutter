@@ -15,7 +15,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SESSION_ROOT = path.join(__dirname, 'wa_sessions');
+const SESSION_ROOT = process.env.WA_SESSION_DIR || path.join(__dirname, 'wa_sessions');
 
 // In-memory state per client_id.
 const sessions = new Map();
