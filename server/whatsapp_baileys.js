@@ -47,9 +47,14 @@ function sessionDir(clientId) {
  */
 async function createSession(clientId, { pairingPhone = null, clearAuth = false } = {}) {
   // Tear down any existing socket cleanly.
+  // Mark it superseded FIRST so its connection.update handler won't schedule
+  // another reconnect when socket.end() triggers a close event.
   const prev = sessions.get(clientId);
-  if (prev?.socket) {
-    try { prev.socket.end(undefined); } catch (_) {}
+  if (prev) {
+    prev.superseded = true;
+    if (prev.socket) {
+      try { prev.socket.end(undefined); } catch (_) {}
+    }
   }
 
   if (clearAuth) {
@@ -64,6 +69,7 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
     pairingCode: null,  // 8-char code alternative to QR
     phone: null,
     lastError: null,
+    superseded: false,  // set to true when replaced by a newer session
   };
   sessions.set(clientId, state);
 
@@ -105,6 +111,10 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
     // Register connection.update BEFORE calling requestPairingCode so no events
     // are missed if they fire during the await.
     socket.ev.on('connection.update', async (update) => {
+      // This session was replaced by a newer one — ignore all events to
+      // prevent stale handlers from scheduling duplicate reconnects.
+      if (state.superseded) return;
+
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
@@ -140,12 +150,15 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
         const loggedOut = statusCode === DisconnectReason.loggedOut
           || statusCode === 401;
 
-        if (loggedOut && state.pairingCode) {
-          // 401 while a pairing code is active: WhatsApp closes the initial
-          // unauthenticated session as part of the pairing flow.
-          // Credentials may have been saved via creds.update — reconnect
-          // (without clearing auth) so Baileys picks them up.
-          console.log(`[WhatsApp] Client ${clientId}: 401 after pairing code at ${new Date().toISOString()} — reconnecting with saved creds.`);
+        // After the user enters the pairing code, WhatsApp closes the initial
+        // unauthenticated socket. This shows up as 401 OR as code=undefined.
+        // Either way, credentials should have been saved — reconnect without
+        // clearing auth so Baileys picks them up.
+        const isPairingClose = state.pairingCode != null
+          && (loggedOut || statusCode === undefined);
+
+        if (isPairingClose) {
+          console.log(`[WhatsApp] Client ${clientId}: post-pairing close (code ${statusCode}) — reconnecting with saved creds.`);
           state.pairingCode = null; // prevent this branch looping
           state.connecting = true;
           setTimeout(() => createSessionCompat(clientId).catch((e) => {
