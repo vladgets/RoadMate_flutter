@@ -305,8 +305,10 @@ export function registerWhatsAppBaileysRoutes(app) {
   });
 
   // ── POST /whatsapp/send ──────────────────────────────────────────────────
+  // Accepts optional image_base64 (base64-encoded image). If present,
+  // sends an image with caption instead of a plain text message.
   app.post('/whatsapp/send', async (req, res) => {
-    const { client_id, phone, message } = req.body ?? {};
+    const { client_id, phone, message, image_base64 } = req.body ?? {};
     if (!client_id || !phone || !message) {
       return res.status(400).json({ ok: false, error: 'Missing client_id, phone, or message' });
     }
@@ -320,7 +322,13 @@ export function registerWhatsAppBaileysRoutes(app) {
     try {
       const digits = phone.replace(/[^0-9]/g, '');
       const jid = `${digits}@s.whatsapp.net`;
-      await s.socket.sendMessage(jid, { text: message });
+
+      if (image_base64) {
+        const imageBuffer = Buffer.from(image_base64, 'base64');
+        await s.socket.sendMessage(jid, { image: imageBuffer, caption: message });
+      } else {
+        await s.socket.sendMessage(jid, { text: message });
+      }
       console.log(`[WhatsApp] Sent to ${digits} for client ${client_id}`);
       return res.json({ ok: true, to: digits });
     } catch (e) {

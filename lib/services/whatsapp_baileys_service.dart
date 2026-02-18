@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -114,10 +115,18 @@ class WhatsAppBaileysService {
   }
 
   /// Send a WhatsApp message to [phone] (international digits, e.g. "15551234567").
+  /// Optionally attach an image from [imagePath].
   /// Returns true on success.
-  Future<bool> send({required String phone, required String message}) async {
+  Future<bool> send({required String phone, required String message, String? imagePath}) async {
     try {
       final id = await _clientId();
+
+      String? imageBase64;
+      if (imagePath != null) {
+        final bytes = await File(imagePath).readAsBytes();
+        imageBase64 = base64Encode(bytes);
+      }
+
       final res = await http
           .post(
             Uri.parse('$_base/whatsapp/send'),
@@ -126,9 +135,10 @@ class WhatsAppBaileysService {
               'client_id': id,
               'phone': phone,
               'message': message,
+              if (imageBase64 != null) 'image_base64': imageBase64,
             }),
           )
-          .timeout(const Duration(seconds: 20));
+          .timeout(Duration(seconds: imageBase64 != null ? 60 : 20));
       final body = jsonDecode(res.body) as Map<String, dynamic>;
       return body['ok'] == true;
     } catch (e) {

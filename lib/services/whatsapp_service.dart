@@ -77,15 +77,18 @@ class WhatsAppService {
       final cleanPhone = contact.phoneNumber.replaceAll(RegExp(r'[\s\-\(\)\+]'), '');
 
       // ── Auto-send path (Baileys connected) ──────────────────────────────
-      if (autoSend && photoPath == null) {
+      if (autoSend) {
         final sent = await WhatsAppBaileysService.instance.send(
           phone: cleanPhone,
           message: finalMessage,
+          imagePath: photoPath,
         );
         if (sent) {
           return {
             'status': 'success',
-            'message': 'WhatsApp message sent automatically to ${contact.name}.',
+            'message': photoPath != null
+                ? 'WhatsApp message with photo sent automatically to ${contact.name}.'
+                : 'WhatsApp message sent automatically to ${contact.name}.',
             'contact': contact.name,
             'phone': contact.phoneNumber,
             'auto_sent': true,
