@@ -114,6 +114,10 @@ DateTime computeNextOccurrence(Reminder r) {
 class RemindersService {
   RemindersService._();
 
+  /// Register this to receive notification content when the user taps a reminder.
+  /// Called with (title, body) — set by main.dart after the conversation store is ready.
+  static void Function(String title, String body)? onNotificationTap;
+
   static final RemindersService instance = RemindersService._();
 
   static const String _prefsKey = 'roadmate_reminders_v1';
@@ -160,6 +164,7 @@ class RemindersService {
       initSettings,
       onDidReceiveNotificationResponse: (resp) {
         debugPrint('[Reminders] Notification tapped: ${resp.payload}');
+        _handleNotificationTap(resp.payload);
       },
     );
 
@@ -456,7 +461,7 @@ class RemindersService {
       r.text,
       tzWhen,
       details,
-      payload: jsonEncode({'reminder_id': r.id}),
+      payload: jsonEncode({'reminder_id': r.id, 'title': 'Reminder', 'body': r.text}),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
@@ -491,6 +496,34 @@ class RemindersService {
 
     debugPrint('[Reminders] AI reminder WorkManager task scheduled: id=${r.id}'
         ' delay=${delay.inMinutes}m');
+  }
+
+  /// Parse payload and fire [onNotificationTap] if registered.
+  static void _handleNotificationTap(String? payload) {
+    if (payload == null || onNotificationTap == null) return;
+    try {
+      final data = jsonDecode(payload) as Map<String, dynamic>;
+      final title = (data['title'] as String?)?.trim() ?? 'Reminder';
+      final body = (data['body'] as String?)?.trim() ?? '';
+      if (body.isNotEmpty) onNotificationTap!(title, body);
+    } catch (_) {}
+  }
+
+  /// Returns the payload of the notification that launched the app (if any).
+  /// Call this on startup to handle the case where the app was terminated
+  /// when the user tapped a notification.
+  Future<Map<String, dynamic>?> getLaunchNotificationPayload() async {
+    await init();
+    try {
+      final details = await _notifications.getNotificationAppLaunchDetails();
+      if (details?.didNotificationLaunchApp == true) {
+        final payload = details!.notificationResponse?.payload;
+        if (payload != null) {
+          return jsonDecode(payload) as Map<String, dynamic>;
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<List<Reminder>> _loadAll() async {

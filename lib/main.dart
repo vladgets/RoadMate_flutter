@@ -121,7 +121,7 @@ Future<void> _handleAiReminderTask(Map<String, dynamic> inputData) async {
           priority: Priority.high,
         ),
       ),
-      payload: jsonEncode({'reminder_id': reminderId}),
+      payload: jsonEncode({'reminder_id': reminderId, 'title': label, 'body': notificationBody}),
     );
 
     // Reschedule for next occurrence if recurring.
@@ -391,6 +391,26 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
       if (!store.hasSessions) {
         await store.createNewSession();
       }
+
+      // Route reminder notification taps to chat history.
+      RemindersService.onNotificationTap = (title, body) {
+        final text = title != 'Reminder' ? '🔔 $title\n$body' : '🔔 $body';
+        _conversationStore?.addMessageToActiveSession(ChatMessage.assistant(text));
+        if (mounted) setState(() {});
+      };
+
+      // Handle case where the app was launched by tapping a notification
+      // while it was fully terminated.
+      final launchPayload = await RemindersService.instance.getLaunchNotificationPayload();
+      if (launchPayload != null) {
+        final title = (launchPayload['title'] as String?)?.trim() ?? 'Reminder';
+        final body = (launchPayload['body'] as String?)?.trim() ?? '';
+        if (body.isNotEmpty) {
+          final text = title != 'Reminder' ? '🔔 $title\n$body' : '🔔 $body';
+          await store.addMessageToActiveSession(ChatMessage.assistant(text));
+        }
+      }
+
       if (mounted) setState(() {});
     });
 
