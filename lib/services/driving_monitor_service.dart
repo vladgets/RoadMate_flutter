@@ -60,6 +60,23 @@ class DrivingMonitorService {
   }
 
   /// Stop monitoring and reset state.
+  /// Simulate a trip start — for testing in the office without driving.
+  /// Bypasses the sensor pipeline and directly fires the driving-started logic.
+  Future<void> simulateTripStart() async {
+    await _initNotifications();
+    _isDriving = true;
+    _vehicleReadings = _debounceCount;
+    _onDrivingStarted();
+  }
+
+  /// Simulate a park — for testing in the office without driving.
+  Future<void> simulateParked() async {
+    await _initNotifications();
+    _isDriving = false;
+    _vehicleReadings = 0;
+    _onParked();
+  }
+
   Future<void> stop() async {
     await _subscription?.cancel();
     _subscription = null;

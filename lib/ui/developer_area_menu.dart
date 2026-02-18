@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'youtube_history_screen.dart';
 import 'driving_log_screen.dart';
 import '../services/photo_index_service.dart';
+import '../services/driving_monitor_service.dart';
 import '../config.dart';
 
 
@@ -54,6 +55,42 @@ class _SettingsScreenState extends State<DeveloperAreaScreen> {
                 MaterialPageRoute(builder: (_) => const DrivingLogScreen()),
               );
             },
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Simulate Trip Start'),
+                    onPressed: () async {
+                      await DrivingMonitorService.instance.simulateTripStart();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Trip start simulated — check notification & log')),
+                        );
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.stop),
+                    label: const Text('Simulate Parked'),
+                    onPressed: () async {
+                      await DrivingMonitorService.instance.simulateParked();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Parked simulated — check notification & log')),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
           const Divider(),
           ListTile(

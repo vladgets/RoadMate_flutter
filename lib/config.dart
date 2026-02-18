@@ -57,6 +57,7 @@ Date: {{CURRENT_DATE_READABLE}}
 
   // Our server URL and preference keys
   static const serverUrl = "https://roadmate-flutter.onrender.com";
+  // static const serverUrl = "http://10.0.0.219:3000"; // local test   
   static const prefKeyClientId = 'roadmate_client_id';
   static const prefKeyVoice = 'roadmate_voice';
   static const prefKeyInitialGreetingEnabled = 'roadmate_initial_greeting_enabled';
