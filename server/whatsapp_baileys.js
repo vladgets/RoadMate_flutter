@@ -95,7 +95,7 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
       auth: authState,
       logger: silentLogger,
       printQRInTerminal: false,
-      browser: ['Ubuntu', 'Chrome', '120.0.0'],
+      browser: ['RoadMate', 'RoadMate', '1.0.0'],
     });
 
     state.socket = socket;
