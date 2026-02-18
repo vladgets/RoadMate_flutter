@@ -107,7 +107,8 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
     state.socket = socket;
 
     socket.ev.on('creds.update', () => {
-      console.log(`[WhatsApp] Client ${clientId}: credentials received from WhatsApp`);
+      const registered = socket.authState?.creds?.registered ?? false;
+      console.log(`[WhatsApp] Client ${clientId}: creds.update (registered=${registered})`);
       saveCreds();
     });
 
