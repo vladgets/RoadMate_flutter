@@ -315,7 +315,7 @@ class _ActivityFeed extends StatefulWidget {
 }
 
 class _ActivityFeedState extends State<_ActivityFeed> {
-  static const _maxEvents = 10;
+  static const _maxEvents = 5;
   final List<ActivityEvent> _events = [];
   StreamSubscription<ActivityEvent>? _sub;
 
