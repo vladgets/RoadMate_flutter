@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
+import 'app_control_settings_screen.dart';
 import 'extensions_settings_screen.dart';
 import 'onboarding_screen.dart';
 import 'whatsapp_settings_screen.dart';
@@ -145,6 +146,17 @@ class _AppConfigurationScreenState extends State<AppConfigurationScreen> {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const WhatsAppSettingsScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.accessibility_new),
+            title: const Text('App Control'),
+            subtitle: const Text('Tap buttons in any app by voice'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AppControlSettingsScreen()),
               );
             },
           ),
