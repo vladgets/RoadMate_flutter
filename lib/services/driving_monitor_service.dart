@@ -44,6 +44,12 @@ class DrivingMonitorService {
   bool _isDriving = false;
   int _vehicleReadings = 0;
 
+  // Last location captured while in-vehicle, used as the park location.
+  // Captures where the car stopped rather than where the person is standing
+  // when parking is eventually confirmed (which can be minutes and metres later).
+  Map<String, dynamic>? _lastVehicleLocation;
+  DateTime? _lastVehicleLocationTs;
+
   // Throttle: only call setFlutterAlive once per 60 s to avoid MethodChannel spam.
   DateTime? _lastAlivePing;
 
@@ -123,8 +129,14 @@ class DrivingMonitorService {
     switch (type) {
       case ActivityType.inVehicle:
         _vehicleReadings++;
+        // Keep a fresh snapshot of the vehicle's location so that when
+        // parking is later confirmed the address is where the car stopped,
+        // not where the person happens to be standing during detection.
+        unawaited(_refreshVehicleLocation());
         if (_vehicleReadings >= _debounceCount && !_isDriving) {
           _isDriving = true;
+          _lastVehicleLocation = null; // clear stale location from a previous trip
+          _lastVehicleLocationTs = null;
           _onDrivingStarted();
         }
         break;
@@ -143,6 +155,26 @@ class DrivingMonitorService {
       default:
         break;
     }
+  }
+
+  /// Capture the current location while in-vehicle, throttled to once per 2 min.
+  /// Stored in [_lastVehicleLocation] and used as the park location so the
+  /// logged address reflects where the car stopped, not where the person walked to.
+  Future<void> _refreshVehicleLocation() async {
+    final now = DateTime.now();
+    if (_lastVehicleLocationTs != null &&
+        now.difference(_lastVehicleLocationTs!).inMinutes < 2) {
+      return;
+    }
+    _lastVehicleLocationTs = now;
+    try {
+      final loc = await getBestEffortBackgroundLocation();
+      if (loc['ok'] == true) {
+        _lastVehicleLocation = loc;
+        debugPrint('[DrivingMonitor] Vehicle location updated: '
+            '${loc['lat']}, ${loc['lon']}');
+      }
+    } catch (_) {}
   }
 
   /// Tell the native DrivingDetectionReceiver that Flutter is alive.
@@ -168,13 +200,18 @@ class DrivingMonitorService {
         if (raw is! Map) continue;
         final type = raw['type'] as String? ?? 'start';
         final tsMs = raw['ts'] as int? ?? DateTime.now().millisecondsSinceEpoch;
+        final lat = (raw['lat'] as num?)?.toDouble();
+        final lon = (raw['lon'] as num?)?.toDouble();
         final event = DrivingEvent(
           id: _uuid.v4(),
           type: type,
           timestamp: DateTime.fromMillisecondsSinceEpoch(tsMs).toUtc().toIso8601String(),
+          lat: lat,
+          lon: lon,
         );
         await DrivingLogStore.instance.insertEvent(event);
-        debugPrint('[DrivingMonitor] Drained native event: $type at ${event.timestamp}');
+        debugPrint('[DrivingMonitor] Drained native event: $type at ${event.timestamp}'
+            '${lat != null ? ' ($lat, $lon)' : ''}');
       }
     } catch (e) {
       debugPrint('[DrivingMonitor] Failed to drain native events: $e');
@@ -194,7 +231,16 @@ class DrivingMonitorService {
   Future<void> _captureAndLog(
       String type, String notifTitle, String notifBodyFallback) async {
     try {
-      final location = await getBestEffortBackgroundLocation();
+      // For park events, prefer the last location captured while still in-vehicle
+      // so the address reflects where the car stopped, not where detection fired
+      // (which can be minutes later and metres away after the person has walked off).
+      final Map<String, dynamic> location;
+      if (type == 'park' && _lastVehicleLocation != null) {
+        location = _lastVehicleLocation!;
+        debugPrint('[DrivingMonitor] Using saved vehicle location for park event');
+      } else {
+        location = await getBestEffortBackgroundLocation();
+      }
 
       // Log to store
       final event = await DrivingLogStore.instance.logEvent(type, location);

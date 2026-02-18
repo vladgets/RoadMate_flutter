@@ -1,11 +1,13 @@
 package com.example.road_mate_flutter
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.location.LocationManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -38,6 +40,8 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
         private const val KEY_IS_DRIVING = "native_is_driving"
         private const val KEY_VEHICLE_COUNT = "native_vehicle_count"
         const val KEY_PENDING_EVENTS = "native_pending_events"
+        private const val KEY_LAST_VEH_LAT = "native_last_veh_lat"
+        private const val KEY_LAST_VEH_LON = "native_last_veh_lon"
 
         // Flutter must have sent a heartbeat within this window or native takes over.
         private const val FLUTTER_ALIVE_WINDOW_MS = 120_000L
@@ -74,6 +78,9 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
             DetectedActivity.IN_VEHICLE -> {
                 vehicleCount++
                 prefs.edit().putInt(KEY_VEHICLE_COUNT, vehicleCount).apply()
+                // Snapshot the current location so park logging uses the spot
+                // where the car stopped, not where the person walked to later.
+                snapshotVehicleLocation(context, prefs)
                 if (vehicleCount >= DEBOUNCE_COUNT && !isDriving) {
                     prefs.edit().putBoolean(KEY_IS_DRIVING, true).apply()
                     onDrivingStarted(context, prefs)
@@ -107,10 +114,43 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
     private fun addPendingEvent(prefs: SharedPreferences, type: String) {
         val ts = System.currentTimeMillis()
         val existing = prefs.getString(KEY_PENDING_EVENTS, "[]") ?: "[]"
-        val newEvent = """{"type":"$type","ts":$ts}"""
+
+        // For park events, include the last-vehicle location so Flutter can
+        // log the correct address (where the car stopped, not current location).
+        val newEvent = if (type == "park") {
+            val lat = prefs.getFloat(KEY_LAST_VEH_LAT, Float.NaN)
+            val lon = prefs.getFloat(KEY_LAST_VEH_LON, Float.NaN)
+            if (!lat.isNaN() && !lon.isNaN()) {
+                """{"type":"$type","ts":$ts,"lat":$lat,"lon":$lon}"""
+            } else {
+                """{"type":"$type","ts":$ts}"""
+            }
+        } else {
+            """{"type":"$type","ts":$ts}"""
+        }
+
         val updated = if (existing == "[]") "[$newEvent]" else "${existing.dropLast(1)},$newEvent]"
         prefs.edit().putString(KEY_PENDING_EVENTS, updated).apply()
         Log.d(TAG, "Pending event queued: $newEvent")
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun snapshotVehicleLocation(context: Context, prefs: SharedPreferences) {
+        try {
+            val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            for (provider in providers) {
+                val loc = lm.getLastKnownLocation(provider) ?: continue
+                prefs.edit()
+                    .putFloat(KEY_LAST_VEH_LAT, loc.latitude.toFloat())
+                    .putFloat(KEY_LAST_VEH_LON, loc.longitude.toFloat())
+                    .apply()
+                Log.d(TAG, "Vehicle location snapshot: ${loc.latitude}, ${loc.longitude}")
+                return
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not snapshot vehicle location: $e")
+        }
     }
 
     private fun showNotification(context: Context, id: Int, title: String, text: String) {
