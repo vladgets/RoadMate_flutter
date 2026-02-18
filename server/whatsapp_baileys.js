@@ -106,7 +106,10 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
 
     state.socket = socket;
 
-    socket.ev.on('creds.update', saveCreds);
+    socket.ev.on('creds.update', () => {
+      console.log(`[WhatsApp] Client ${clientId}: credentials received from WhatsApp`);
+      saveCreds();
+    });
 
     // Register connection.update BEFORE calling requestPairingCode so no events
     // are missed if they fire during the await.
@@ -200,6 +203,18 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
         state.pairingCode = resolvedPairingCode;
         clearTimeout(timeoutHandle);
         console.log(`[WhatsApp] Formatted pairing code for ${clientId}: ${resolvedPairingCode} at ${new Date().toISOString()}`);
+
+        // If WhatsApp doesn't complete the handshake within 90s after the code
+        // is shown, it's being silently rate-limited. Surface a clear error.
+        setTimeout(() => {
+          if (state.superseded || state.connected) return;
+          if (state.pairingCode) { // still waiting — no creds.update arrived
+            state.pairingCode = null;
+            state.connecting = false;
+            state.lastError = 'WhatsApp did not complete pairing. Too many recent attempts — wait 1–2 hours and try again.';
+            console.error(`[WhatsApp] Client ${clientId}: pairing timeout — likely rate-limited by WhatsApp`);
+          }
+        }, 90_000);
       } catch (e) {
         console.error(`[WhatsApp] requestPairingCode failed for ${clientId}:`, e.message, e.stack);
         state.lastError = `Pairing code error: ${e.message}`;
