@@ -27,6 +27,13 @@ class DrivingMonitorService {
       FlutterLocalNotificationsPlugin();
   bool _notifInitialized = false;
 
+  final StreamController<ActivityEvent> _rawEventController =
+      StreamController<ActivityEvent>.broadcast();
+
+  /// Raw activity events from the sensor — every event, before any filtering.
+  /// Subscribe in the Developer Area to confirm the sensor pipeline is alive.
+  Stream<ActivityEvent> get rawEvents => _rawEventController.stream;
+
   StreamSubscription<ActivityEvent>? _subscription;
   bool _isDriving = false;
   int _vehicleReadings = 0;
@@ -90,6 +97,8 @@ class DrivingMonitorService {
     final confidence = event.confidence;
 
     debugPrint('[DrivingMonitor] Activity: $type confidence=$confidence isDriving=$_isDriving');
+
+    _rawEventController.add(event); // forward to diagnostic stream before filtering
 
     if (confidence < _minConfidence) return;
 
