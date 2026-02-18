@@ -885,10 +885,11 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   'navigate_to_destination': (args) async {
     return await handleOpenMapsRouteToolCall(args);
   },
-  // phone call tool — mute mic before handing off to the dialer
+  // phone call tool — disconnect session before handing off to the dialer
   'call_phone': (args) async {
-    _mic?.getAudioTracks().forEach((t) => t.enabled = false);
-    return await handlePhoneCallTool(args);
+    final result = await handlePhoneCallTool(args);
+    unawaited(_disconnect());
+    return result;
   },
   // Reminders tools (local notifications)
   'reminder_create': (args) async {
