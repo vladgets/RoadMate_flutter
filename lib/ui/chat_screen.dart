@@ -624,12 +624,13 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const SizedBox(height: 4),
           // Date · City on one line
-          if (photo.timestamp != null || photo.location != null)
+          if (photo.timestamp != null ||
+              (photo.location != null && photo.location!.isNotEmpty))
             Text(
               [
                 if (photo.timestamp != null)
                   DateFormat.MMMd().format(photo.timestamp!),
-                if (photo.location != null)
+                if (photo.location != null && photo.location!.isNotEmpty)
                   photo.location!.split(',').first.trim(),
               ].join(' · '),
               style: TextStyle(

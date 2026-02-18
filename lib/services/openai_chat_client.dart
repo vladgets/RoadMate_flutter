@@ -139,19 +139,19 @@ class OpenAIChatClient {
         result = {'error': 'Tool execution not available'};
       }
 
-      // For photo results, strip file paths before sending to the model.
-      // The model doesn't need paths to summarise results, and including them
-      // causes it to repeat them verbatim in the chat message.
+      // For photo results, send only the count to the model — not individual
+      // photo details (timestamps, paths, coordinates). The thumbnails already
+      // show all that; giving it to the model causes it to repeat every date
+      // in the message text.
       final resultForModel = (functionName == 'search_photos' &&
               result['ok'] == true &&
               result['photos'] is List)
           ? {
-              ...result,
-              'photos': (result['photos'] as List).map((p) {
-                final m = Map<String, dynamic>.from(p as Map);
-                m.remove('path');
-                return m;
-              }).toList(),
+              'ok': true,
+              'count': (result['photos'] as List).length,
+              if (result['query'] != null && (result['query'] as String).isNotEmpty)
+                'query': result['query'],
+              if (result['message'] != null) 'message': result['message'],
             }
           : result;
 
