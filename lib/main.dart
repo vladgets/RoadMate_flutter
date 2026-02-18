@@ -101,6 +101,16 @@ Future<void> _handleAiReminderTask(Map<String, dynamic> inputData) async {
       }
     }
 
+    // Queue the reminder for chat history (fires regardless of whether user taps).
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('roadmate_pending_reminder_chat');
+      final list = raw != null ? (jsonDecode(raw) as List).cast<Map<String, dynamic>>() : <Map<String, dynamic>>[];
+      list.removeWhere((e) => (e['id'] as num?)?.toInt() == reminderId);
+      list.add({'id': reminderId, 'title': label, 'body': notificationBody, 'fireTime': DateTime.now().toIso8601String()});
+      await prefs.setString('roadmate_pending_reminder_chat', jsonEncode(list));
+    } catch (_) {}
+
     // Show notification.
     final notifications = FlutterLocalNotificationsPlugin();
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -392,24 +402,23 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
         await store.createNewSession();
       }
 
-      // Route reminder notification taps to chat history.
+      // Drain reminders that fired since last app open and add to chat.
+      // This works even if the user never tapped the notification (e.g. while driving).
+      final fired = await RemindersService.instance.drainFiredReminders();
+      for (final r in fired) {
+        if (r.body.isNotEmpty) {
+          final text = r.title != 'Reminder' ? '🔔 ${r.title}\n${r.body}' : '🔔 ${r.body}';
+          await store.addMessageToActiveSession(ChatMessage.assistant(text));
+        }
+      }
+
+      // Also handle tap while app is running (instant feedback, no duplicate
+      // since drainFiredReminders already removed it from the queue).
       RemindersService.onNotificationTap = (title, body) {
         final text = title != 'Reminder' ? '🔔 $title\n$body' : '🔔 $body';
         _conversationStore?.addMessageToActiveSession(ChatMessage.assistant(text));
         if (mounted) setState(() {});
       };
-
-      // Handle case where the app was launched by tapping a notification
-      // while it was fully terminated.
-      final launchPayload = await RemindersService.instance.getLaunchNotificationPayload();
-      if (launchPayload != null) {
-        final title = (launchPayload['title'] as String?)?.trim() ?? 'Reminder';
-        final body = (launchPayload['body'] as String?)?.trim() ?? '';
-        if (body.isNotEmpty) {
-          final text = title != 'Reminder' ? '🔔 $title\n$body' : '🔔 $body';
-          await store.addMessageToActiveSession(ChatMessage.assistant(text));
-        }
-      }
 
       if (mounted) setState(() {});
     });

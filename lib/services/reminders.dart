@@ -118,6 +118,8 @@ class RemindersService {
   /// Called with (title, body) — set by main.dart after the conversation store is ready.
   static void Function(String title, String body)? onNotificationTap;
 
+  static const String _pendingChatKey = 'roadmate_pending_reminder_chat';
+
   static final RemindersService instance = RemindersService._();
 
   static const String _prefsKey = 'roadmate_reminders_v1';
@@ -270,6 +272,18 @@ class RemindersService {
     all.add(reminder);
     await _saveAll(all);
 
+    // Add a pending chat entry so the reminder appears in chat when it fires,
+    // even if the user never taps the notification (e.g. while driving).
+    // AI reminders have a placeholder body; it gets updated at fire time.
+    if (aiPrompt == null) {
+      await _addPendingChatEntry(
+        reminderId: id,
+        title: 'Reminder',
+        body: reminder.text,
+        fireTime: whenLocal,
+      );
+    }
+
     // Schedule notification. If scheduling fails, roll back.
     try {
       if (aiPrompt != null && Platform.isAndroid) {
@@ -293,6 +307,9 @@ class RemindersService {
   /// Cancel a reminder (also cancels the underlying scheduled notification/task).
   Future<void> cancelReminder(int id) async {
     await init();
+
+    // Remove from pending chat queue so it won't appear in chat.
+    await _removePendingChatEntry(id);
 
     // Cancel flutter_local_notifications (covers regular + iOS AI reminders)
     await _notifications.cancel(id);
@@ -497,6 +514,73 @@ class RemindersService {
     debugPrint('[Reminders] AI reminder WorkManager task scheduled: id=${r.id}'
         ' delay=${delay.inMinutes}m');
   }
+
+  // ── Pending chat queue ──────────────────────────────────────────────────────
+  // Written at schedule time; drained on app start so reminders appear in chat
+  // even when the user never taps the notification (e.g. while driving).
+
+  Future<void> _addPendingChatEntry({
+    required int reminderId,
+    required String title,
+    required String body,
+    required DateTime fireTime,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_pendingChatKey);
+      final list = raw != null ? (jsonDecode(raw) as List).cast<Map<String, dynamic>>() : <Map<String, dynamic>>[];
+      list.removeWhere((e) => (e['id'] as num?)?.toInt() == reminderId);
+      list.add({'id': reminderId, 'title': title, 'body': body, 'fireTime': fireTime.toIso8601String()});
+      await prefs.setString(_pendingChatKey, jsonEncode(list));
+    } catch (_) {}
+  }
+
+  Future<void> _removePendingChatEntry(int reminderId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_pendingChatKey);
+      if (raw == null) return;
+      final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+      list.removeWhere((e) => (e['id'] as num?)?.toInt() == reminderId);
+      await prefs.setString(_pendingChatKey, jsonEncode(list));
+    } catch (_) {}
+  }
+
+  /// Returns all pending reminder chat entries whose fire time has passed,
+  /// and removes them from the queue. Call on app start to add them to chat.
+  Future<List<({String title, String body})>> drainFiredReminders() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_pendingChatKey);
+      if (raw == null) return [];
+
+      final now = DateTime.now();
+      final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+      final fired = <Map<String, dynamic>>[];
+      final remaining = <Map<String, dynamic>>[];
+
+      for (final entry in list) {
+        final fireTime = DateTime.tryParse(entry['fireTime'] as String? ?? '');
+        if (fireTime != null && fireTime.isBefore(now)) {
+          fired.add(entry);
+        } else {
+          remaining.add(entry);
+        }
+      }
+
+      if (fired.isEmpty) return [];
+
+      await prefs.setString(_pendingChatKey, jsonEncode(remaining));
+      return fired.map((e) => (
+        title: (e['title'] as String?) ?? 'Reminder',
+        body: (e['body'] as String?) ?? '',
+      )).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ── Notification tap handling ────────────────────────────────────────────────
 
   /// Parse payload and fire [onNotificationTap] if registered.
   static void _handleNotificationTap(String? payload) {
