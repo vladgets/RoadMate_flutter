@@ -45,6 +45,7 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom(animate: false);
     });
+
   }
 
   @override

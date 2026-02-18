@@ -25,7 +25,7 @@ Voice Notes vs Memory:
 - save_voice_note = longer stories (auto-captures location/time)
 - search_voice_notes = search by text/location/time
 
-Photos: search_photos by location/time. Present simply.
+Photos: search_photos by location/time. Reply with just "Here are X photos" — no descriptions, no locations, no lists. Thumbnails show all details.
 WebSearch: for up-to-date/verifiable facts only.
 
 Reminders:
@@ -576,6 +576,35 @@ $trimmedPrefs''';
             "description": "Maximum number of events to return (default 10, max 50)."
           }
         }
+      }
+    },
+    {
+      "type": "function",
+      "name": "get_place_visits",
+      "description": "Get recent place visits — locations where the user spent 10+ minutes. Use when the user asks 'where have I been today?', 'where did I spend most time this week?', 'did I go to work yesterday?', or wants to review their daily locations.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of visits to return (default 10, max 50)."
+          }
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "save_named_place",
+      "description": "Save the user's current location with a name (e.g. 'Home', 'Work', 'Gym'). Call this when the user says 'save this as my home', 'remember this place as work', 'this is my gym', etc. The location is auto-detected from GPS.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Name for this place, e.g. 'Home', 'Work', 'Gym', 'Mom\\'s house'."
+          }
+        },
+        "required": ["label"]
       }
     }
   ];

@@ -19,46 +19,41 @@ class PhotoIndexService {
   PhotoIndex? _index;
   bool _isIndexing = false;
 
-  /// Initialize service and load existing index
+/// Initialize service and load existing index
   Future<void> init() async {
     await _loadIndex();
-    final photosWithLocation = _index?.photos.where((p) => p.address != null).length ?? 0;
-    final photosWithTimestamp = _index?.photos.where((p) => p.timestamp != null).length ?? 0;
     // ignore: avoid_print
     print('[PhotoIndexService] Initialized with ${_index?.photos.length ?? 0} photos indexed');
-    // ignore: avoid_print
-    print('[PhotoIndexService] Photos with location: $photosWithLocation, with timestamp: $photosWithTimestamp');
     if (_index != null && _index!.photos.isNotEmpty) {
-      final sample = _index!.photos.take(3).toList();
-      for (var photo in sample) {
-        // ignore: avoid_print
-        print('[PhotoIndexService] Sample: ${photo.address ?? "no location"}, ${photo.timestamp?.toString() ?? "no timestamp"}');
-      }
-
       // Check for any new photos taken since the index was last built
       _checkAndIndexNewPhotos();
     }
   }
 
-  /// Check if photos permission is granted
+  /// Check if photos permission is granted (including ACCESS_MEDIA_LOCATION on Android)
   Future<bool> hasPermission() async {
-    final state = await PhotoManager.requestPermissionExtend();
-    return state.isAuth;
+    final state = await PhotoManager.requestPermissionExtend(
+      requestOption: const PermissionRequestOption(
+        androidPermission: AndroidPermission(
+          type: RequestType.image,
+          mediaLocation: true,
+        ),
+      ),
+    );
+    return state.isAuth || state == PermissionState.limited;
   }
 
-  /// Request photos permission
+  /// Request photos permission (including ACCESS_MEDIA_LOCATION on Android)
   Future<bool> requestPermission() async {
-    final state = await PhotoManager.requestPermissionExtend();
-    if (state.isAuth) {
-      return true;
-    }
-
-    // If limited access on iOS, still allow
-    if (state == PermissionState.limited) {
-      return true;
-    }
-
-    return false;
+    final state = await PhotoManager.requestPermissionExtend(
+      requestOption: const PermissionRequestOption(
+        androidPermission: AndroidPermission(
+          type: RequestType.image,
+          mediaLocation: true,
+        ),
+      ),
+    );
+    return state.isAuth || state == PermissionState.limited;
   }
 
   /// Load index from SharedPreferences
