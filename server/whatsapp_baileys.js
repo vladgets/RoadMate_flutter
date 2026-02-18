@@ -90,13 +90,12 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
     const dir = sessionDir(clientId);
     const { state: authState, saveCreds } = await useMultiFileAuthState(dir);
 
-    const { Browsers } = baileys;
     const socket = makeWASocket({
       version,
       auth: authState,
       logger: silentLogger,
       printQRInTerminal: false,
-      browser: Browsers.ubuntu('Chrome'),
+      browser: ['Ubuntu', 'Chrome', '120.0.0'],
     });
 
     state.socket = socket;
@@ -172,16 +171,11 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
 
     // Request pairing code AFTER listeners are registered (so we don't miss events).
     if (pairingPhone) {
-      // Wait for the noise-protocol handshake to complete before sending the
-      // pairing-code request. We listen for the first connection.update event
-      // (which fires once the WS channel is open), with a 5s fallback.
-      await new Promise(resolve => {
-        let done = false;
-        const fallback = setTimeout(() => { if (!done) { done = true; resolve(); } }, 5000);
-        socket.ev.on('connection.update', () => {
-          if (!done) { done = true; clearTimeout(fallback); resolve(); }
-        });
-      });
+      // Wait for the noise-protocol handshake with WA to complete.
+      // A fixed delay is more reliable than waiting for connection.update,
+      // because the close event (rate-limit 401) would otherwise resolve the
+      // promise immediately and we'd call requestPairingCode on a dead socket.
+      await new Promise(r => setTimeout(r, 1500));
 
       console.log(`[WhatsApp] Requesting pairing code for ${clientId}, phone=${pairingPhone}, registered=${socket.authState.creds.registered}`);
       try {
