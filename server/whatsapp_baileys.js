@@ -145,7 +145,7 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
           // unauthenticated session as part of the pairing flow.
           // Credentials may have been saved via creds.update — reconnect
           // (without clearing auth) so Baileys picks them up.
-          console.log(`[WhatsApp] Client ${clientId}: 401 after pairing code — reconnecting with saved creds.`);
+          console.log(`[WhatsApp] Client ${clientId}: 401 after pairing code at ${new Date().toISOString()} — reconnecting with saved creds.`);
           state.pairingCode = null; // prevent this branch looping
           state.connecting = true;
           setTimeout(() => createSessionCompat(clientId).catch((e) => {
@@ -186,7 +186,7 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
           : (raw ?? null);
         state.pairingCode = resolvedPairingCode;
         clearTimeout(timeoutHandle);
-        console.log(`[WhatsApp] Formatted pairing code for ${clientId}: ${resolvedPairingCode}`);
+        console.log(`[WhatsApp] Formatted pairing code for ${clientId}: ${resolvedPairingCode} at ${new Date().toISOString()}`);
       } catch (e) {
         console.error(`[WhatsApp] requestPairingCode failed for ${clientId}:`, e.message, e.stack);
         state.lastError = `Pairing code error: ${e.message}`;
