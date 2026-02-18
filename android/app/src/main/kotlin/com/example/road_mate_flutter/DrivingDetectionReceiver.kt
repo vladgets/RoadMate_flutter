@@ -25,9 +25,9 @@ import com.google.android.gms.location.DetectedActivity
  * When Flutter is alive (it updates [KEY_FLUTTER_ALIVE_TS] every ~60 s),
  * this receiver does nothing — the Dart DrivingMonitorService handles it.
  * When Flutter is dead (ts is stale), this receiver:
- *   1. Runs the driving state machine in SharedPreferences
+ *   1. Runs the driving + visit state machines in SharedPreferences
  *   2. Shows a notification via Android NotificationManager
- *   3. Appends a pending event to [KEY_PENDING_EVENTS] for Flutter to pick
+ *   3. Appends pending events to [KEY_PENDING_EVENTS] for Flutter to pick
  *      up the next time the app is launched.
  */
 class DrivingDetectionReceiver : BroadcastReceiver() {
@@ -43,11 +43,21 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
         private const val KEY_LAST_VEH_LAT = "native_last_veh_lat"
         private const val KEY_LAST_VEH_LON = "native_last_veh_lon"
 
+        // Visit state keys
+        private const val KEY_VISIT_ACTIVE = "native_visit_active"
+        private const val KEY_VISIT_START_TS = "native_visit_start_ts"
+        private const val KEY_VISIT_LAT = "native_visit_lat"
+        private const val KEY_VISIT_LON = "native_visit_lon"
+        private const val KEY_VISIT_LAST_TS = "native_visit_last_ts"
+
         // Flutter must have sent a heartbeat within this window or native takes over.
         private const val FLUTTER_ALIVE_WINDOW_MS = 120_000L
 
         private const val DEBOUNCE_COUNT = 2
         private const val MIN_CONFIDENCE = 60
+
+        private const val VISIT_RADIUS_M = 150f
+        private const val VISIT_THRESHOLD_MS = 600_000L // 10 minutes
 
         private const val NOTIF_CHANNEL_ID = "roadmate_driving_monitor"
         private const val NOTIF_CHANNEL_NAME = "Driving Monitor"
@@ -76,10 +86,10 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
 
         when (mostLikely.type) {
             DetectedActivity.IN_VEHICLE -> {
+                // Finalize any active visit before processing drive start
+                maybeFinalizeVisit(prefs)
                 vehicleCount++
                 prefs.edit().putInt(KEY_VEHICLE_COUNT, vehicleCount).apply()
-                // Snapshot the current location so park logging uses the spot
-                // where the car stopped, not where the person walked to later.
                 snapshotVehicleLocation(context, prefs)
                 if (vehicleCount >= DEBOUNCE_COUNT && !isDriving) {
                     prefs.edit().putBoolean(KEY_IS_DRIVING, true).apply()
@@ -89,6 +99,7 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
             DetectedActivity.STILL,
             DetectedActivity.ON_FOOT,
             DetectedActivity.WALKING -> {
+                handleVisitActivity(context, prefs)
                 prefs.edit().putInt(KEY_VEHICLE_COUNT, 0).apply()
                 if (isDriving) {
                     prefs.edit().putBoolean(KEY_IS_DRIVING, false).apply()
@@ -99,24 +110,24 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
         }
     }
 
+    // ---- Driving events ----
+
     private fun onDrivingStarted(context: Context, prefs: SharedPreferences) {
         Log.d(TAG, "Drive started (native)")
-        addPendingEvent(prefs, "start")
+        addTripPendingEvent(prefs, "start")
         showNotification(context, NOTIF_ID_START, "Trip started", "Your drive has begun")
     }
 
     private fun onParked(context: Context, prefs: SharedPreferences) {
         Log.d(TAG, "Parked (native)")
-        addPendingEvent(prefs, "park")
+        addTripPendingEvent(prefs, "park")
         showNotification(context, NOTIF_ID_PARK, "You parked", "Your drive has ended")
     }
 
-    private fun addPendingEvent(prefs: SharedPreferences, type: String) {
+    private fun addTripPendingEvent(prefs: SharedPreferences, type: String) {
         val ts = System.currentTimeMillis()
         val existing = prefs.getString(KEY_PENDING_EVENTS, "[]") ?: "[]"
 
-        // For park events, include the last-vehicle location so Flutter can
-        // log the correct address (where the car stopped, not current location).
         val newEvent = if (type == "park") {
             val lat = prefs.getFloat(KEY_LAST_VEH_LAT, Float.NaN)
             val lon = prefs.getFloat(KEY_LAST_VEH_LON, Float.NaN)
@@ -131,7 +142,109 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
 
         val updated = if (existing == "[]") "[$newEvent]" else "${existing.dropLast(1)},$newEvent]"
         prefs.edit().putString(KEY_PENDING_EVENTS, updated).apply()
-        Log.d(TAG, "Pending event queued: $newEvent")
+        Log.d(TAG, "Trip pending event queued: $newEvent")
+    }
+
+    // ---- Visit state machine ----
+
+    private fun handleVisitActivity(context: Context, prefs: SharedPreferences) {
+        val coords = getLastKnownCoordinates(context) ?: return
+        val (lat, lon) = coords
+        val now = System.currentTimeMillis()
+
+        val visitActive = prefs.getBoolean(KEY_VISIT_ACTIVE, false)
+
+        if (!visitActive) {
+            prefs.edit()
+                .putBoolean(KEY_VISIT_ACTIVE, true)
+                .putLong(KEY_VISIT_START_TS, now)
+                .putFloat(KEY_VISIT_LAT, lat)
+                .putFloat(KEY_VISIT_LON, lon)
+                .putLong(KEY_VISIT_LAST_TS, now)
+                .apply()
+            Log.d(TAG, "Visit tracking started at $lat, $lon")
+            return
+        }
+
+        val visitLat = prefs.getFloat(KEY_VISIT_LAT, 0f)
+        val visitLon = prefs.getFloat(KEY_VISIT_LON, 0f)
+        val distance = distanceM(visitLat.toDouble(), visitLon.toDouble(),
+            lat.toDouble(), lon.toDouble())
+
+        if (distance <= VISIT_RADIUS_M) {
+            prefs.edit().putLong(KEY_VISIT_LAST_TS, now).apply()
+            Log.d(TAG, "Visit still at same location (${distance.toInt()}m)")
+        } else {
+            // Moved — commit previous visit if it qualifies, start fresh
+            val startTs = prefs.getLong(KEY_VISIT_START_TS, now)
+            val lastTs = prefs.getLong(KEY_VISIT_LAST_TS, now)
+            if (lastTs - startTs >= VISIT_THRESHOLD_MS) {
+                Log.d(TAG, "Visit ended by location change: ${(lastTs - startTs) / 60000}min")
+                addVisitPendingEvent(prefs, startTs, lastTs, visitLat, visitLon)
+            }
+            prefs.edit()
+                .putBoolean(KEY_VISIT_ACTIVE, true)
+                .putLong(KEY_VISIT_START_TS, now)
+                .putFloat(KEY_VISIT_LAT, lat)
+                .putFloat(KEY_VISIT_LON, lon)
+                .putLong(KEY_VISIT_LAST_TS, now)
+                .apply()
+            Log.d(TAG, "Visit restarted at new location $lat, $lon")
+        }
+    }
+
+    private fun maybeFinalizeVisit(prefs: SharedPreferences) {
+        if (!prefs.getBoolean(KEY_VISIT_ACTIVE, false)) return
+
+        val startTs = prefs.getLong(KEY_VISIT_START_TS, 0L)
+        val lastTs = prefs.getLong(KEY_VISIT_LAST_TS, 0L)
+        val visitLat = prefs.getFloat(KEY_VISIT_LAT, 0f)
+        val visitLon = prefs.getFloat(KEY_VISIT_LON, 0f)
+
+        prefs.edit()
+            .putBoolean(KEY_VISIT_ACTIVE, false)
+            .remove(KEY_VISIT_START_TS)
+            .remove(KEY_VISIT_LAT)
+            .remove(KEY_VISIT_LON)
+            .remove(KEY_VISIT_LAST_TS)
+            .apply()
+
+        if (lastTs - startTs >= VISIT_THRESHOLD_MS) {
+            Log.d(TAG, "Visit finalized on drive start: ${(lastTs - startTs) / 60000}min")
+            addVisitPendingEvent(prefs, startTs, lastTs, visitLat, visitLon)
+        }
+    }
+
+    private fun addVisitPendingEvent(
+        prefs: SharedPreferences,
+        startTs: Long,
+        endTs: Long,
+        lat: Float,
+        lon: Float
+    ) {
+        val existing = prefs.getString(KEY_PENDING_EVENTS, "[]") ?: "[]"
+        val newEvent = """{"type":"visit","ts_start":$startTs,"ts_end":$endTs,"lat":$lat,"lon":$lon}"""
+        val updated = if (existing == "[]") "[$newEvent]" else "${existing.dropLast(1)},$newEvent]"
+        prefs.edit().putString(KEY_PENDING_EVENTS, updated).apply()
+        Log.d(TAG, "Visit pending event queued: ${(endTs - startTs) / 60000}min at $lat, $lon")
+    }
+
+    // ---- Location helpers ----
+
+    @SuppressLint("MissingPermission")
+    private fun getLastKnownCoordinates(context: Context): Pair<Float, Float>? {
+        return try {
+            val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            for (provider in providers) {
+                val loc = lm.getLastKnownLocation(provider) ?: continue
+                return Pair(loc.latitude.toFloat(), loc.longitude.toFloat())
+            }
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not get coordinates: $e")
+            null
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -152,6 +265,14 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
             Log.w(TAG, "Could not snapshot vehicle location: $e")
         }
     }
+
+    private fun distanceM(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
+        val results = FloatArray(1)
+        android.location.Location.distanceBetween(lat1, lon1, lat2, lon2, results)
+        return results[0]
+    }
+
+    // ---- Notifications ----
 
     private fun showNotification(context: Context, id: Int, title: String, text: String) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

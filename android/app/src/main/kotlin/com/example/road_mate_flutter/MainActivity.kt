@@ -188,7 +188,7 @@ class MainActivity : FlutterActivity() {
                 .addOnSuccessListener {
                     Log.d("DrivingDetection", "Native activity recognition registered")
                 }
-                .addOnFailureListener { e ->
+                .addOnFailureListener { e: Exception ->
                     Log.w("DrivingDetection", "Native registration failed (permission not granted yet?): $e")
                 }
         } catch (e: Exception) {

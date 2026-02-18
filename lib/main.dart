@@ -32,6 +32,7 @@ import 'services/whatsapp_service.dart';
 import 'services/app_control_service.dart';
 import 'services/driving_log_store.dart';
 import 'services/driving_monitor_service.dart';
+import 'services/named_places_store.dart';
 import 'ui/voice_memories_screen.dart';
 
 
@@ -884,8 +885,9 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   'navigate_to_destination': (args) async {
     return await handleOpenMapsRouteToolCall(args);
   },
-  // phone call tool
+  // phone call tool — mute mic before handing off to the dialer
   'call_phone': (args) async {
+    _mic?.getAudioTracks().forEach((t) => t.enabled = false);
     return await handlePhoneCallTool(args);
   },
   // Reminders tools (local notifications)
@@ -940,6 +942,14 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   // Driving log tool
   'get_driving_log': (args) async {
     return await DrivingLogStore.instance.toolGetDrivingLog(args);
+  },
+  // Place visits tools
+  'get_place_visits': (args) async {
+    return await DrivingLogStore.instance.toolGetPlaceVisits(args);
+  },
+  'save_named_place': (args) async {
+    final location = await getCurrentLocation();
+    return await NamedPlacesStore.instance.toolSaveNamedPlace(args, location);
   },
 };
 

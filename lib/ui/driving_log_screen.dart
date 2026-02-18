@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/driving_log_store.dart';
+import '../services/driving_monitor_service.dart';
 
 class DrivingLogScreen extends StatefulWidget {
   const DrivingLogScreen({super.key});
@@ -29,25 +30,56 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
     });
   }
 
+  String _buildMapLabel(DrivingEvent event) {
+    final isStart = event.type == 'start';
+    final isVisit = event.type == 'visit';
+    final verb = isStart ? 'Trip started' : isVisit ? (event.label ?? 'Visit') : 'Parked';
+
+    String timeStr;
+    try {
+      final utc = DateTime.parse(event.timestamp);
+      final local = utc.toLocal();
+      final now = DateTime.now();
+      final diff = now.difference(local);
+      final t = DateFormat('h:mm a').format(local);
+      if (diff.inDays == 0) {
+        timeStr = 'Today $t';
+      } else if (diff.inDays == 1) {
+        timeStr = 'Yesterday $t';
+      } else {
+        timeStr = DateFormat('MMM d, y • h:mm a').format(local);
+      }
+    } catch (_) {
+      timeStr = event.timestamp;
+    }
+
+    if (event.address != null && event.address!.isNotEmpty) {
+      return '$verb · $timeStr · ${event.address}';
+    }
+    if (event.lat != null && event.lon != null) {
+      return '$verb · $timeStr · '
+          '${event.lat!.toStringAsFixed(5)}, ${event.lon!.toStringAsFixed(5)}';
+    }
+    return '$verb · $timeStr';
+  }
+
   Future<void> _openInMaps(DrivingEvent event) async {
-    // Prefer coordinates if available, fall back to address string
     Uri? uri;
+    final label = Uri.encodeComponent(_buildMapLabel(event));
 
     if (event.lat != null && event.lon != null) {
       final lat = event.lat!;
       final lon = event.lon!;
-      final label = Uri.encodeComponent(event.address ?? 'Location');
       if (Platform.isIOS) {
         uri = Uri.parse('http://maps.apple.com/?ll=$lat,$lon&q=$label');
       } else {
         uri = Uri.parse('geo:$lat,$lon?q=$lat,$lon($label)');
       }
     } else if (event.address != null && event.address!.isNotEmpty) {
-      final encoded = Uri.encodeComponent(event.address!);
       if (Platform.isIOS) {
-        uri = Uri.parse('http://maps.apple.com/?q=$encoded');
+        uri = Uri.parse('http://maps.apple.com/?q=$label');
       } else {
-        uri = Uri.parse('geo:0,0?q=$encoded');
+        uri = Uri.parse('geo:0,0?q=$label');
       }
     }
 
@@ -90,9 +122,6 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
 
     if (ok != true || !mounted) return;
 
-    // Clear via store by re-initialising with empty list is not exposed —
-    // achieve by logging nothing; instead expose clear via prefs directly.
-    // For now just reload (clearing is low priority for a dev screen).
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Clear not yet implemented — delete app data to reset')),
     );
@@ -100,6 +129,8 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentVisit = DrivingMonitorService.instance.currentVisit;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Driving Log'),
@@ -121,40 +152,98 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _events.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.directions_car_outlined,
-                          size: 64, color: Colors.grey[400]),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No driving events yet',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 16),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Drive for ~2 minutes to trigger detection',
-                        style: TextStyle(color: Colors.grey[400], fontSize: 13),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.separated(
-                  itemCount: _events.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final event = _events[index];
-                    return _EventTile(
-                      event: event,
-                      onOpenMap: () => _openInMaps(event),
-                    );
-                  },
+          : Column(
+              children: [
+                // Ongoing visit banner
+                if (currentVisit != null)
+                  _OngoingVisitBanner(visitInfo: currentVisit),
+                Expanded(
+                  child: _events.isEmpty && currentVisit == null
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.directions_car_outlined,
+                                  size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No events yet',
+                                style: TextStyle(
+                                    color: Colors.grey[600], fontSize: 16),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Drive or stay still for 10+ min to trigger detection',
+                                style: TextStyle(
+                                    color: Colors.grey[400], fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: _events.length,
+                          separatorBuilder: (_, i) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final event = _events[index];
+                            return _EventTile(
+                              event: event,
+                              onOpenMap: () => _openInMaps(event),
+                            );
+                          },
+                        ),
                 ),
+              ],
+            ),
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Ongoing visit banner shown at the top when a visit is in progress
+// ---------------------------------------------------------------------------
+
+class _OngoingVisitBanner extends StatelessWidget {
+  const _OngoingVisitBanner({required this.visitInfo});
+
+  final Map<String, dynamic> visitInfo;
+
+  @override
+  Widget build(BuildContext context) {
+    String sinceStr = '';
+    try {
+      final start = DateTime.parse(visitInfo['startTime'] as String).toLocal();
+      sinceStr = DateFormat('h:mm a').format(start);
+    } catch (_) {}
+
+    return Container(
+      color: Colors.indigo.withValues(alpha: 0.08),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(Icons.location_on, color: Colors.indigo[600], size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              sinceStr.isEmpty
+                  ? 'Visiting this location…'
+                  : 'Visiting since $sinceStr',
+              style: TextStyle(
+                color: Colors.indigo[700],
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Icon(Icons.circle, size: 8, color: Colors.indigo[400]),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Event tile — handles start, park, and visit types
+// ---------------------------------------------------------------------------
 
 class _EventTile extends StatelessWidget {
   const _EventTile({required this.event, required this.onOpenMap});
@@ -165,10 +254,25 @@ class _EventTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isStart = event.type == 'start';
+    final isVisit = event.type == 'visit';
 
-    final icon = isStart ? Icons.directions_car : Icons.local_parking;
-    final iconColor = isStart ? Colors.green[700]! : Colors.blue[700]!;
-    final label = isStart ? 'Trip started' : 'Parked';
+    final IconData icon;
+    final Color iconColor;
+    final String label;
+
+    if (isVisit) {
+      icon = Icons.location_on;
+      iconColor = Colors.indigo[700]!;
+      label = event.label != null ? 'Visit · ${event.label}' : 'Visit';
+    } else if (isStart) {
+      icon = Icons.directions_car;
+      iconColor = Colors.green[700]!;
+      label = 'Trip started';
+    } else {
+      icon = Icons.local_parking;
+      iconColor = Colors.blue[700]!;
+      label = 'Parked';
+    }
 
     final timestamp = _formatTimestamp(event.timestamp);
     final hasLocation = event.lat != null || event.address != null;
@@ -182,7 +286,10 @@ class _EventTile extends StatelessWidget {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(timestamp, style: const TextStyle(fontSize: 12)),
+          Text(
+            isVisit ? _formatVisitTime(event) : timestamp,
+            style: const TextStyle(fontSize: 12),
+          ),
           if (event.address != null && event.address!.isNotEmpty)
             Text(
               event.address!,
@@ -217,15 +324,44 @@ class _EventTile extends StatelessWidget {
       final local = utc.toLocal();
       final now = DateTime.now();
       final diff = now.difference(local);
-
       final timeStr = DateFormat('h:mm a').format(local);
-
       if (diff.inDays == 0) return 'Today $timeStr';
       if (diff.inDays == 1) return 'Yesterday $timeStr';
       if (diff.inDays < 7) return '${diff.inDays}d ago $timeStr';
       return DateFormat('MMM d, y • h:mm a').format(local);
     } catch (_) {
       return iso;
+    }
+  }
+
+  String _formatVisitTime(DrivingEvent event) {
+    try {
+      final start = DateTime.parse(event.timestamp).toLocal();
+      final now = DateTime.now();
+      final diff = now.difference(start);
+      final startStr = DateFormat('h:mm a').format(start);
+
+      String dayPrefix;
+      if (diff.inDays == 0) {
+        dayPrefix = 'Today';
+      } else if (diff.inDays == 1) {
+        dayPrefix = 'Yesterday';
+      } else {
+        dayPrefix = DateFormat('MMM d').format(start);
+      }
+
+      if (event.endTimestamp != null) {
+        final end = DateTime.parse(event.endTimestamp!).toLocal();
+        final endStr = DateFormat('h:mm a').format(end);
+        final dur = event.durationMinutes ?? 0;
+        final durStr = dur >= 60
+            ? '${dur ~/ 60}h ${dur % 60}m'
+            : '${dur}m';
+        return '$dayPrefix $startStr – $endStr ($durStr)';
+      }
+      return '$dayPrefix $startStr';
+    } catch (_) {
+      return event.timestamp;
     }
   }
 }

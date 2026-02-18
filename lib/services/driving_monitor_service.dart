@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:activity_recognition_flutter/activity_recognition_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -9,18 +10,24 @@ import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 import 'driving_log_store.dart';
+import 'named_places_store.dart';
 import 'geo_time_tools.dart';
 
-/// Monitors device activity to detect driving start/stop events.
-/// Subscribes to the activity recognition stream and maintains a simple
-/// debounced state machine: STILL → driving=false, IN_VEHICLE → driving=true.
+/// Monitors device activity to detect driving start/stop events and place visits.
+///
+/// Dual-path detection:
+///   • App alive → this Dart service handles everything via activity stream.
+///   • App killed → DrivingDetectionReceiver.kt handles it natively.
 class DrivingMonitorService {
   DrivingMonitorService._();
   static final DrivingMonitorService instance = DrivingMonitorService._();
 
+  // ---- Config ----
   static const int _debounceCount = 2;
   static const int _minConfidence = 60;
+  static const double _visitRadiusM = 150.0;
 
+  // ---- Notifications ----
   static const int _notifIdStart = 9001;
   static const int _notifIdPark = 9002;
   static const String _channelId = 'roadmate_driving_monitor';
@@ -30,44 +37,56 @@ class DrivingMonitorService {
       FlutterLocalNotificationsPlugin();
   bool _notifInitialized = false;
 
+  // ---- Native bridge ----
   static const _bridge = MethodChannel('roadmate/driving_bridge');
   static const _uuid = Uuid();
 
+  // ---- Raw event stream (for Developer Area live feed) ----
   final StreamController<ActivityEvent> _rawEventController =
       StreamController<ActivityEvent>.broadcast();
-
-  /// Raw activity events from the sensor — every event, before any filtering.
-  /// Subscribe in the Developer Area to confirm the sensor pipeline is alive.
   Stream<ActivityEvent> get rawEvents => _rawEventController.stream;
 
+  // ---- Driving state ----
   StreamSubscription<ActivityEvent>? _subscription;
   bool _isDriving = false;
   int _vehicleReadings = 0;
-
-  // Last location captured while in-vehicle, used as the park location.
-  // Captures where the car stopped rather than where the person is standing
-  // when parking is eventually confirmed (which can be minutes and metres later).
   Map<String, dynamic>? _lastVehicleLocation;
   DateTime? _lastVehicleLocationTs;
 
-  // Throttle: only call setFlutterAlive once per 60 s to avoid MethodChannel spam.
+  // ---- Visit tracking state ----
+  bool _visitActive = false;
+  double? _visitLat;
+  double? _visitLon;
+  DateTime? _visitStartTime;
+  DateTime? _visitLastTime;
+  Map<String, dynamic>? _visitLocation; // full location map with address
+
+  /// Non-null while a visit is being tracked (app alive).
+  /// Used by DrivingLogScreen to show "Visiting since…" indicator.
+  Map<String, dynamic>? get currentVisit => _visitActive
+      ? {
+          'startTime': _visitStartTime!.toIso8601String(),
+          'lat': _visitLat,
+          'lon': _visitLon,
+        }
+      : null;
+
+  // ---- Throttle ----
   DateTime? _lastAlivePing;
 
-  /// Start monitoring. On Android requests ACTIVITY_RECOGNITION permission.
+  // ---- Public API ----
+
   Future<void> start() async {
-    if (_subscription != null) return; // already running
+    if (_subscription != null) return;
 
     await _initNotifications();
-
-    // Tell the native receiver Flutter is alive (suppresses native duplicates).
+    await NamedPlacesStore.instance.init();
     await _pingAlive();
 
-    // Drain any events the native receiver queued while the app was dead.
     if (Platform.isAndroid) {
       await _drainNativePendingEvents();
     }
 
-    // Request permission on Android 10+ (API 29+)
     if (Platform.isAndroid) {
       final status = await Permission.activityRecognition.request();
       if (status.isDenied || status.isPermanentlyDenied) {
@@ -89,9 +108,15 @@ class DrivingMonitorService {
     }
   }
 
-  /// Stop monitoring and reset state.
-  /// Simulate a trip start — for testing in the office without driving.
-  /// Bypasses the sensor pipeline and directly fires the driving-started logic.
+  Future<void> stop() async {
+    await _subscription?.cancel();
+    _subscription = null;
+    _isDriving = false;
+    _vehicleReadings = 0;
+    _visitActive = false;
+    debugPrint('[DrivingMonitor] Stopped');
+  }
+
   Future<void> simulateTripStart() async {
     await _initNotifications();
     _isDriving = true;
@@ -99,7 +124,6 @@ class DrivingMonitorService {
     _onDrivingStarted();
   }
 
-  /// Simulate a park — for testing in the office without driving.
   Future<void> simulateParked() async {
     await _initNotifications();
     _isDriving = false;
@@ -107,13 +131,7 @@ class DrivingMonitorService {
     _onParked();
   }
 
-  Future<void> stop() async {
-    await _subscription?.cancel();
-    _subscription = null;
-    _isDriving = false;
-    _vehicleReadings = 0;
-    debugPrint('[DrivingMonitor] Stopped');
-  }
+  // ---- Activity handling ----
 
   void _onActivity(ActivityEvent event) {
     final type = event.type;
@@ -121,21 +139,20 @@ class DrivingMonitorService {
 
     debugPrint('[DrivingMonitor] Activity: $type confidence=$confidence isDriving=$_isDriving');
 
-    _rawEventController.add(event); // forward to diagnostic stream before filtering
-    unawaited(_pingAlive()); // keep native receiver suppressed while Dart is running
+    _rawEventController.add(event);
+    unawaited(_pingAlive());
 
     if (confidence < _minConfidence) return;
 
     switch (type) {
       case ActivityType.inVehicle:
+        // Close any active visit before registering driving
+        unawaited(_maybeCloseVisit());
         _vehicleReadings++;
-        // Keep a fresh snapshot of the vehicle's location so that when
-        // parking is later confirmed the address is where the car stopped,
-        // not where the person happens to be standing during detection.
         unawaited(_refreshVehicleLocation());
         if (_vehicleReadings >= _debounceCount && !_isDriving) {
           _isDriving = true;
-          _lastVehicleLocation = null; // clear stale location from a previous trip
+          _lastVehicleLocation = null;
           _lastVehicleLocationTs = null;
           _onDrivingStarted();
         }
@@ -145,6 +162,7 @@ class DrivingMonitorService {
       case ActivityType.onFoot:
       case ActivityType.walking:
         _vehicleReadings = 0;
+        unawaited(_onStillActivity());
         if (_isDriving) {
           _isDriving = false;
           _onParked();
@@ -157,66 +175,81 @@ class DrivingMonitorService {
     }
   }
 
-  /// Capture the current location while in-vehicle, throttled to once per 2 min.
-  /// Stored in [_lastVehicleLocation] and used as the park location so the
-  /// logged address reflects where the car stopped, not where the person walked to.
-  Future<void> _refreshVehicleLocation() async {
-    final now = DateTime.now();
-    if (_lastVehicleLocationTs != null &&
-        now.difference(_lastVehicleLocationTs!).inMinutes < 2) {
-      return;
-    }
-    _lastVehicleLocationTs = now;
+  // ---- Visit tracking ----
+
+  Future<void> _onStillActivity() async {
     try {
       final loc = await getBestEffortBackgroundLocation();
-      if (loc['ok'] == true) {
-        _lastVehicleLocation = loc;
-        debugPrint('[DrivingMonitor] Vehicle location updated: '
-            '${loc['lat']}, ${loc['lon']}');
+      if (loc['ok'] != true) return;
+      final lat = (loc['lat'] as num).toDouble();
+      final lon = (loc['lon'] as num).toDouble();
+
+      if (!_visitActive) {
+        _visitLat = lat;
+        _visitLon = lon;
+        _visitLocation = loc;
+        _visitStartTime = DateTime.now();
+        _visitLastTime = DateTime.now();
+        _visitActive = true;
+        debugPrint('[DrivingMonitor] Visit tracking started at $lat, $lon');
+        return;
       }
-    } catch (_) {}
-  }
 
-  /// Tell the native DrivingDetectionReceiver that Flutter is alive.
-  /// Throttled to once per 60 s — called on start and on every activity event.
-  Future<void> _pingAlive() async {
-    if (!Platform.isAndroid) return;
-    final now = DateTime.now();
-    if (_lastAlivePing != null && now.difference(_lastAlivePing!).inSeconds < 60) return;
-    _lastAlivePing = now;
-    try {
-      await _bridge.invokeMethod('setFlutterAlive');
-    } catch (_) {}
-  }
-
-  /// Read events queued by the native receiver while the app was dead,
-  /// insert them into DrivingLogStore, then clear the native queue.
-  Future<void> _drainNativePendingEvents() async {
-    try {
-      final json = await _bridge.invokeMethod<String>('getPendingEvents');
-      if (json == null || json == '[]') return;
-      final list = jsonDecode(json) as List<dynamic>;
-      for (final raw in list) {
-        if (raw is! Map) continue;
-        final type = raw['type'] as String? ?? 'start';
-        final tsMs = raw['ts'] as int? ?? DateTime.now().millisecondsSinceEpoch;
-        final lat = (raw['lat'] as num?)?.toDouble();
-        final lon = (raw['lon'] as num?)?.toDouble();
-        final event = DrivingEvent(
-          id: _uuid.v4(),
-          type: type,
-          timestamp: DateTime.fromMillisecondsSinceEpoch(tsMs).toUtc().toIso8601String(),
-          lat: lat,
-          lon: lon,
-        );
-        await DrivingLogStore.instance.insertEvent(event);
-        debugPrint('[DrivingMonitor] Drained native event: $type at ${event.timestamp}'
-            '${lat != null ? ' ($lat, $lon)' : ''}');
+      final dist = _distanceM(_visitLat!, _visitLon!, lat, lon);
+      if (dist <= _visitRadiusM) {
+        _visitLastTime = DateTime.now();
+        debugPrint('[DrivingMonitor] Visit same location (${dist.toStringAsFixed(0)}m), '
+            '${DateTime.now().difference(_visitStartTime!).inMinutes}min elapsed');
+      } else {
+        // Moved to a different location — close current visit if it qualifies
+        debugPrint('[DrivingMonitor] Moved ${dist.toStringAsFixed(0)}m from visit location');
+        await _maybeCloseVisit();
+        // Start fresh at new location
+        _visitLat = lat;
+        _visitLon = lon;
+        _visitLocation = loc;
+        _visitStartTime = DateTime.now();
+        _visitLastTime = DateTime.now();
+        _visitActive = true;
       }
     } catch (e) {
-      debugPrint('[DrivingMonitor] Failed to drain native events: $e');
+      debugPrint('[DrivingMonitor] _onStillActivity error: $e');
     }
   }
+
+  Future<void> _maybeCloseVisit() async {
+    if (!_visitActive) return;
+
+    // Capture and clear state atomically
+    final start = _visitStartTime!;
+    final end = _visitLastTime!;
+    final lat = _visitLat!;
+    final lon = _visitLon!;
+    final location = _visitLocation ?? {'ok': true, 'lat': lat, 'lon': lon};
+
+    _visitActive = false;
+    _visitLat = null;
+    _visitLon = null;
+    _visitStartTime = null;
+    _visitLastTime = null;
+    _visitLocation = null;
+
+    final thresholdMin = await NamedPlacesStore.instance.getVisitThresholdMinutes();
+    final durationMin = end.difference(start).inMinutes;
+
+    if (durationMin >= thresholdMin) {
+      debugPrint('[DrivingMonitor] Visit qualified: ${durationMin}min');
+      try {
+        await DrivingLogStore.instance.logVisit(start, end, location);
+      } catch (e) {
+        debugPrint('[DrivingMonitor] Error logging visit: $e');
+      }
+    } else {
+      debugPrint('[DrivingMonitor] Visit too short (${durationMin}min < ${thresholdMin}min), discarded');
+    }
+  }
+
+  // ---- Driving events ----
 
   void _onDrivingStarted() {
     debugPrint('[DrivingMonitor] Driving started');
@@ -231,9 +264,6 @@ class DrivingMonitorService {
   Future<void> _captureAndLog(
       String type, String notifTitle, String notifBodyFallback) async {
     try {
-      // For park events, prefer the last location captured while still in-vehicle
-      // so the address reflects where the car stopped, not where detection fired
-      // (which can be minutes later and metres away after the person has walked off).
       final Map<String, dynamic> location;
       if (type == 'park' && _lastVehicleLocation != null) {
         location = _lastVehicleLocation!;
@@ -242,10 +272,8 @@ class DrivingMonitorService {
         location = await getBestEffortBackgroundLocation();
       }
 
-      // Log to store
       final event = await DrivingLogStore.instance.logEvent(type, location);
 
-      // Build notification body
       final timeStr = DateFormat('h:mm a').format(DateTime.now());
       String body;
       if (event.address != null && event.address!.isNotEmpty) {
@@ -264,6 +292,94 @@ class DrivingMonitorService {
       debugPrint('[DrivingMonitor] Error in _captureAndLog: $e');
     }
   }
+
+  // ---- Helpers ----
+
+  Future<void> _refreshVehicleLocation() async {
+    final now = DateTime.now();
+    if (_lastVehicleLocationTs != null &&
+        now.difference(_lastVehicleLocationTs!).inMinutes < 2) {
+      return;
+    }
+    _lastVehicleLocationTs = now;
+    try {
+      final loc = await getBestEffortBackgroundLocation();
+      if (loc['ok'] == true) {
+        _lastVehicleLocation = loc;
+        debugPrint('[DrivingMonitor] Vehicle location updated: '
+            '${loc['lat']}, ${loc['lon']}');
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _pingAlive() async {
+    if (!Platform.isAndroid) return;
+    final now = DateTime.now();
+    if (_lastAlivePing != null && now.difference(_lastAlivePing!).inSeconds < 60) return;
+    _lastAlivePing = now;
+    try {
+      await _bridge.invokeMethod('setFlutterAlive');
+    } catch (_) {}
+  }
+
+  Future<void> _drainNativePendingEvents() async {
+    try {
+      final json = await _bridge.invokeMethod<String>('getPendingEvents');
+      if (json == null || json == '[]') return;
+      final list = jsonDecode(json) as List<dynamic>;
+      for (final raw in list) {
+        if (raw is! Map) continue;
+        final type = raw['type'] as String? ?? 'start';
+        final tsMs = raw['ts'] as int? ?? DateTime.now().millisecondsSinceEpoch;
+
+        if (type == 'visit') {
+          // Visit events have ts_start, ts_end, lat, lon
+          final tsStart = raw['ts_start'] as int? ?? tsMs;
+          final tsEnd = raw['ts_end'] as int? ?? tsMs;
+          final lat = (raw['lat'] as num?)?.toDouble();
+          final lon = (raw['lon'] as num?)?.toDouble();
+          final start = DateTime.fromMillisecondsSinceEpoch(tsStart);
+          final end = DateTime.fromMillisecondsSinceEpoch(tsEnd);
+          final location = lat != null
+              ? {'ok': true, 'lat': lat, 'lon': lon}
+              : {'ok': false};
+          await DrivingLogStore.instance.logVisit(start, end, location);
+          debugPrint('[DrivingMonitor] Drained native visit: '
+              '${end.difference(start).inMinutes}min'
+              '${lat != null ? ' at ($lat, $lon)' : ''}');
+        } else {
+          // 'start' or 'park'
+          final lat = (raw['lat'] as num?)?.toDouble();
+          final lon = (raw['lon'] as num?)?.toDouble();
+          final event = DrivingEvent(
+            id: _uuid.v4(),
+            type: type,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(tsMs).toUtc().toIso8601String(),
+            lat: lat,
+            lon: lon,
+          );
+          await DrivingLogStore.instance.insertEvent(event);
+          debugPrint('[DrivingMonitor] Drained native event: $type at ${event.timestamp}'
+              '${lat != null ? ' ($lat, $lon)' : ''}');
+        }
+      }
+    } catch (e) {
+      debugPrint('[DrivingMonitor] Failed to drain native events: $e');
+    }
+  }
+
+  static double _distanceM(double lat1, double lon1, double lat2, double lon2) {
+    const r = 6371000.0;
+    final dLat = (lat2 - lat1) * pi / 180;
+    final dLon = (lon2 - lon1) * pi / 180;
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) *
+            sin(dLon / 2) * sin(dLon / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return r * c;
+  }
+
+  // ---- Notifications ----
 
   Future<void> _showNotification({
     required int id,
@@ -287,7 +403,6 @@ class DrivingMonitorService {
         android: androidDetails,
         iOS: iosDetails,
       );
-
       await _notifications.show(id, title, body, details);
       debugPrint('[DrivingMonitor] Notification shown: $title — $body');
     } catch (e) {
@@ -308,20 +423,16 @@ class DrivingMonitorService {
       android: androidInit,
       iOS: iosInit,
     );
-
     await _notifications.initialize(initSettings);
 
-    // Create Android notification channel
     const channel = AndroidNotificationChannel(
       _channelId,
       _channelName,
       description: 'Automatic drive start/stop detection',
       importance: Importance.defaultImportance,
     );
-
     final androidPlugin = _notifications
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     if (androidPlugin != null) {
       await androidPlugin.createNotificationChannel(channel);
     }
