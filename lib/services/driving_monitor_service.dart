@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:activity_recognition_flutter/activity_recognition_flutter.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:uuid/uuid.dart';
 import 'driving_log_store.dart';
 import 'geo_time_tools.dart';
 
@@ -27,6 +30,9 @@ class DrivingMonitorService {
       FlutterLocalNotificationsPlugin();
   bool _notifInitialized = false;
 
+  static const _bridge = MethodChannel('roadmate/driving_bridge');
+  static const _uuid = Uuid();
+
   final StreamController<ActivityEvent> _rawEventController =
       StreamController<ActivityEvent>.broadcast();
 
@@ -38,11 +44,22 @@ class DrivingMonitorService {
   bool _isDriving = false;
   int _vehicleReadings = 0;
 
+  // Throttle: only call setFlutterAlive once per 60 s to avoid MethodChannel spam.
+  DateTime? _lastAlivePing;
+
   /// Start monitoring. On Android requests ACTIVITY_RECOGNITION permission.
   Future<void> start() async {
     if (_subscription != null) return; // already running
 
     await _initNotifications();
+
+    // Tell the native receiver Flutter is alive (suppresses native duplicates).
+    await _pingAlive();
+
+    // Drain any events the native receiver queued while the app was dead.
+    if (Platform.isAndroid) {
+      await _drainNativePendingEvents();
+    }
 
     // Request permission on Android 10+ (API 29+)
     if (Platform.isAndroid) {
@@ -99,6 +116,7 @@ class DrivingMonitorService {
     debugPrint('[DrivingMonitor] Activity: $type confidence=$confidence isDriving=$_isDriving');
 
     _rawEventController.add(event); // forward to diagnostic stream before filtering
+    unawaited(_pingAlive()); // keep native receiver suppressed while Dart is running
 
     if (confidence < _minConfidence) return;
 
@@ -124,6 +142,42 @@ class DrivingMonitorService {
       // running, onBicycle, unknown, tilting, invalid — no state change
       default:
         break;
+    }
+  }
+
+  /// Tell the native DrivingDetectionReceiver that Flutter is alive.
+  /// Throttled to once per 60 s — called on start and on every activity event.
+  Future<void> _pingAlive() async {
+    if (!Platform.isAndroid) return;
+    final now = DateTime.now();
+    if (_lastAlivePing != null && now.difference(_lastAlivePing!).inSeconds < 60) return;
+    _lastAlivePing = now;
+    try {
+      await _bridge.invokeMethod('setFlutterAlive');
+    } catch (_) {}
+  }
+
+  /// Read events queued by the native receiver while the app was dead,
+  /// insert them into DrivingLogStore, then clear the native queue.
+  Future<void> _drainNativePendingEvents() async {
+    try {
+      final json = await _bridge.invokeMethod<String>('getPendingEvents');
+      if (json == null || json == '[]') return;
+      final list = jsonDecode(json) as List<dynamic>;
+      for (final raw in list) {
+        if (raw is! Map) continue;
+        final type = raw['type'] as String? ?? 'start';
+        final tsMs = raw['ts'] as int? ?? DateTime.now().millisecondsSinceEpoch;
+        final event = DrivingEvent(
+          id: _uuid.v4(),
+          type: type,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(tsMs).toUtc().toIso8601String(),
+        );
+        await DrivingLogStore.instance.insertEvent(event);
+        debugPrint('[DrivingMonitor] Drained native event: $type at ${event.timestamp}');
+      }
+    } catch (e) {
+      debugPrint('[DrivingMonitor] Failed to drain native events: $e');
     }
   }
 

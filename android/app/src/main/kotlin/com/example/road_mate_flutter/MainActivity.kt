@@ -1,5 +1,6 @@
 package com.example.road_mate_flutter
 
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.ComponentName
@@ -8,6 +9,7 @@ import android.content.IntentFilter
 import android.os.Build
 import android.service.quicksettings.TileService
 import android.util.Log
+import com.google.android.gms.location.ActivityRecognition
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -113,6 +115,41 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        // Native driving detection bridge.
+        // Flutter calls setFlutterAlive to prevent the native receiver from
+        // duplicating work while the Dart stream is subscribed.
+        // Flutter calls getPendingEvents on startup to pick up events that
+        // the native receiver logged while the app process was dead.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "roadmate/driving_bridge")
+            .setMethodCallHandler { call, result ->
+                val prefs = applicationContext.getSharedPreferences(
+                    DrivingDetectionReceiver.PREFS_NAME, Context.MODE_PRIVATE
+                )
+                when (call.method) {
+                    "setFlutterAlive" -> {
+                        prefs.edit()
+                            .putLong(DrivingDetectionReceiver.KEY_FLUTTER_ALIVE_TS,
+                                     System.currentTimeMillis())
+                            .apply()
+                        result.success(null)
+                    }
+                    "getPendingEvents" -> {
+                        val json = prefs.getString(
+                            DrivingDetectionReceiver.KEY_PENDING_EVENTS, "[]") ?: "[]"
+                        prefs.edit()
+                            .remove(DrivingDetectionReceiver.KEY_PENDING_EVENTS)
+                            .apply()
+                        result.success(json)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        // Register DrivingDetectionReceiver with ActivityRecognition (request code 77,
+        // separate from the plugin's registration at request code 0).
+        // Uses a PendingIntent so events arrive even after the app process is killed.
+        registerNativeDrivingDetection()
+
         // Voice trigger EventChannel — receives Quick Settings tile taps (and
         // accessibility button double-taps on older Android versions).
         // The BroadcastReceiver is already registered above; onListen/onCancel
@@ -135,6 +172,28 @@ class MainActivity : FlutterActivity() {
                     buttonEventSink = null
                 }
             })
+    }
+
+    private fun registerNativeDrivingDetection() {
+        try {
+            val intent = Intent(this, DrivingDetectionReceiver::class.java)
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pendingIntent = PendingIntent.getBroadcast(this, 77, intent, flags)
+            ActivityRecognition.getClient(this)
+                .requestActivityUpdates(5_000L, pendingIntent)
+                .addOnSuccessListener {
+                    Log.d("DrivingDetection", "Native activity recognition registered")
+                }
+                .addOnFailureListener { e ->
+                    Log.w("DrivingDetection", "Native registration failed (permission not granted yet?): $e")
+                }
+        } catch (e: Exception) {
+            Log.e("DrivingDetection", "registerNativeDrivingDetection error: $e")
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -108,6 +108,17 @@ class DrivingLogStore {
     return event;
   }
 
+  /// Insert an already-constructed event (e.g. from native pending queue).
+  Future<void> insertEvent(DrivingEvent event) async {
+    await init();
+    _events.insert(0, event);
+    if (_events.length > _maxEvents) {
+      _events = _events.sublist(0, _maxEvents);
+    }
+    await _save();
+    debugPrint('[DrivingLogStore] Inserted native event: ${event.type} at ${event.timestamp}');
+  }
+
   List<DrivingEvent> getRecentEvents(int limit) {
     if (_events.isEmpty) return [];
     final count = limit.clamp(1, _events.length);

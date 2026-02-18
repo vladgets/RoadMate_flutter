@@ -202,8 +202,8 @@ Future<void> main() async {
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
       eventAction: ForegroundTaskEventAction.nothing(),
-      autoRunOnBoot: true,
-      autoRunOnMyPackageReplaced: true,
+      autoRunOnBoot: false,
+      autoRunOnMyPackageReplaced: false,
       allowWakeLock: true,
       allowWifiLock: false,
     ),
@@ -226,17 +226,6 @@ Future<void> main() async {
   // Initialize driving log store and start background activity monitoring
   await DrivingLogStore.instance.init();
   await DrivingMonitorService.instance.start();
-
-  // Start persistent foreground service so Android never kills the process
-  // while the app is backgrounded — keeps the activity recognition stream alive.
-  if (!await FlutterForegroundTask.isRunningService) {
-    await FlutterForegroundTask.startService(
-      serviceId: 256,
-      notificationTitle: 'RoadMate',
-      notificationText: 'Monitoring for drives',
-      callback: startCallback,
-    );
-  }
 
   // Auto-start accessibility listener if already enabled
   if (await AppControlService.instance.isAccessibilityEnabled()) {
@@ -748,40 +737,26 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     }
   }
 
-  /// Switch foreground service notification to voice mode.
+  /// Start foreground service to keep microphone active when screen is locked.
   Future<void> _startForegroundService() async {
     if (await FlutterForegroundTask.isRunningService) {
-      // Already running in monitoring mode — just update the notification.
-      await FlutterForegroundTask.updateService(
-        notificationTitle: 'RoadMate Voice Assistant',
-        notificationText: 'Voice mode is active',
-        notificationButtons: [
-          const NotificationButton(id: 'stop', text: 'Stop'),
-        ],
-      );
-    } else {
-      await FlutterForegroundTask.startService(
-        serviceId: 256,
-        notificationTitle: 'RoadMate Voice Assistant',
-        notificationText: 'Voice mode is active',
-        notificationButtons: [
-          const NotificationButton(id: 'stop', text: 'Stop'),
-        ],
-        callback: startCallback,
-      );
+      return; // Already running
     }
+    await FlutterForegroundTask.startService(
+      serviceId: 256,
+      notificationTitle: 'RoadMate Voice Assistant',
+      notificationText: 'Voice mode is active',
+      notificationButtons: [
+        const NotificationButton(id: 'stop', text: 'Stop'),
+      ],
+      callback: startCallback,
+    );
   }
 
-  /// Revert foreground service notification back to monitoring mode.
-  /// Never stops the service — keeping it alive is what prevents Android
-  /// from killing the process and losing the activity recognition stream.
+  /// Stop foreground service when voice mode ends.
   Future<void> _stopForegroundService() async {
     if (await FlutterForegroundTask.isRunningService) {
-      await FlutterForegroundTask.updateService(
-        notificationTitle: 'RoadMate',
-        notificationText: 'Monitoring for drives',
-        notificationButtons: [],
-      );
+      await FlutterForegroundTask.stopService();
     }
   }
 

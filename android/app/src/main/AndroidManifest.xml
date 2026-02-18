@@ -39,6 +39,12 @@
              Without this declaration, broadcasts are silently dropped by Android. -->
         <receiver android:name="dk.cachet.activity_recognition_flutter.ActivityRecognizedBroadcastReceiver"
             android:exported="false"/>
+
+        <!-- Native driving detection receiver (request code 77).
+             Wakes the app process briefly to handle activity recognition events
+             even when the app is fully killed — no persistent FGS required. -->
+        <receiver android:name=".DrivingDetectionReceiver"
+            android:exported="false"/>
         <service
             android:name="dk.cachet.activity_recognition_flutter.ActivityRecognizedService"
             android:permission="android.permission.BIND_JOB_SERVICE"
