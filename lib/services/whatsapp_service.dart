@@ -3,6 +3,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/whatsapp_contact.dart';
 import 'memory_store.dart';
 import 'photo_index_service.dart';
+import 'whatsapp_baileys_service.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -62,56 +63,68 @@ class WhatsAppService {
         }
       }
 
+      // Check if Baileys auto-send is available (account paired on server).
+      final baileysStatus = await WhatsAppBaileysService.instance.getStatus();
+      final autoSend = baileysStatus.connected;
+
       // Check if photo is requested
       String? photoPath;
       if (photoLocation != null || photoTime != null) {
         photoPath = await _findPhoto(photoLocation, photoTime);
       }
 
-      // Send message
+      // Clean phone number for all paths
+      final cleanPhone = contact.phoneNumber.replaceAll(RegExp(r'[\s\-\(\)\+]'), '');
+
+      // ── Auto-send path (Baileys connected) ──────────────────────────────
+      if (autoSend && photoPath == null) {
+        final sent = await WhatsAppBaileysService.instance.send(
+          phone: cleanPhone,
+          message: finalMessage,
+        );
+        if (sent) {
+          return {
+            'status': 'success',
+            'message': 'WhatsApp message sent automatically to ${contact.name}.',
+            'contact': contact.name,
+            'phone': contact.phoneNumber,
+            'auto_sent': true,
+          };
+        }
+        // Baileys send failed — fall through to manual path.
+      }
+
+      // ── Manual path (fallback: open WhatsApp) ───────────────────────────
       if (photoPath != null) {
         final success = await _sendWithPhoto(contact.phoneNumber, finalMessage, photoPath);
         if (success) {
           return {
             'status': 'success',
             'message': 'Share sheet opened with your photo and message. '
-                'Select WhatsApp and choose ${contact.name} (${contact.phoneNumber}) to send.',
+                'Select WhatsApp and choose ${contact.name} to send.',
             'contact': contact.name,
             'phone': contact.phoneNumber,
             'has_photo': true,
           };
-        } else {
-          // Fallback to text only
-          final textSuccess = await _sendTextOnly(contact.phoneNumber, finalMessage);
-          if (textSuccess) {
-            return {
-              'status': 'success',
-              'message': 'Could not share photo. WhatsApp opened with your text message to ${contact.name}. '
-                  'Please tap Send to confirm.',
-              'contact': contact.name,
-              'phone': contact.phoneNumber,
-              'has_photo': false,
-            };
-          }
         }
-      } else {
-        final success = await _sendTextOnly(contact.phoneNumber, finalMessage);
-        if (success) {
-          return {
-            'status': 'success',
-            'message': 'WhatsApp opened with your message to ${contact.name}. '
-                'Please tap Send to confirm.',
-            'contact': contact.name,
-            'phone': contact.phoneNumber,
-            'has_photo': false,
-          };
-        }
+        // Fallback to text-only if photo share failed.
       }
 
-      // If we get here, something went wrong
+      final textSuccess = await _sendTextOnly(contact.phoneNumber, finalMessage);
+      if (textSuccess) {
+        return {
+          'status': 'success',
+          'message': 'WhatsApp opened with your message to ${contact.name}. '
+              'Please tap Send to confirm.',
+          'contact': contact.name,
+          'phone': contact.phoneNumber,
+          'has_photo': false,
+        };
+      }
+
       return {
         'status': 'error',
-        'message': 'Could not open WhatsApp. Is it installed on your device?',
+        'message': 'Could not send WhatsApp message. Is WhatsApp installed?',
       };
     } catch (e) {
       return {
