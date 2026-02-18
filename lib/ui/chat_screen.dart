@@ -584,7 +584,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildPhotoGallery(List<PhotoAttachment> photos) {
     return SizedBox(
-      height: 180, // Increased to accommodate labels
+      height: 165, // thumbnail (140) + spacing (4) + label (11 * 1.5) ≈ 165
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: photos.length,
@@ -623,25 +623,19 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          // Date label
-          if (photo.timestamp != null)
+          // Date · City on one line
+          if (photo.timestamp != null || photo.location != null)
             Text(
-              DateFormat.MMMd().format(photo.timestamp!),
+              [
+                if (photo.timestamp != null)
+                  DateFormat.MMMd().format(photo.timestamp!),
+                if (photo.location != null)
+                  photo.location!.split(',').first.trim(),
+              ].join(' · '),
               style: TextStyle(
                 fontSize: 11,
                 color: Colors.grey[700],
                 fontWeight: FontWeight.w500,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          // Location label
-          if (photo.location != null)
-            Text(
-              photo.location!,
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey[600],
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

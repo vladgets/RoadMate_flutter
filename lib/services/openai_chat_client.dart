@@ -139,10 +139,26 @@ class OpenAIChatClient {
         result = {'error': 'Tool execution not available'};
       }
 
+      // For photo results, strip file paths before sending to the model.
+      // The model doesn't need paths to summarise results, and including them
+      // causes it to repeat them verbatim in the chat message.
+      final resultForModel = (functionName == 'search_photos' &&
+              result['ok'] == true &&
+              result['photos'] is List)
+          ? {
+              ...result,
+              'photos': (result['photos'] as List).map((p) {
+                final m = Map<String, dynamic>.from(p as Map);
+                m.remove('path');
+                return m;
+              }).toList(),
+            }
+          : result;
+
       toolMessages.add({
         'role': 'tool',
         'tool_call_id': toolCallId,
-        'content': json.encode(result),
+        'content': json.encode(resultForModel),
       });
     }
 
