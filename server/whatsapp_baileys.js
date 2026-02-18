@@ -141,7 +141,19 @@ async function createSession(clientId, { pairingPhone = null, clearAuth = false 
         const loggedOut = statusCode === DisconnectReason.loggedOut
           || statusCode === 401;
 
-        if (loggedOut) {
+        if (loggedOut && state.pairingCode) {
+          // 401 while a pairing code is active: WhatsApp closes the initial
+          // unauthenticated session as part of the pairing flow.
+          // Credentials may have been saved via creds.update — reconnect
+          // (without clearing auth) so Baileys picks them up.
+          console.log(`[WhatsApp] Client ${clientId}: 401 after pairing code — reconnecting with saved creds.`);
+          state.pairingCode = null; // prevent this branch looping
+          state.connecting = true;
+          setTimeout(() => createSessionCompat(clientId).catch((e) => {
+            state.connecting = false;
+            state.lastError = e.message;
+          }), 1500);
+        } else if (loggedOut) {
           console.log(`[WhatsApp] Client ${clientId} logged out.`);
           state.connecting = false;
           state.lastError = 'Logged out from WhatsApp. Please reconnect.';
