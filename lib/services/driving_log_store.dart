@@ -200,6 +200,14 @@ class DrivingLogStore {
     return List.unmodifiable(_events.sublist(0, count));
   }
 
+  /// Delete a single event by ID.
+  Future<void> deleteEvent(String id) async {
+    await init();
+    _events.removeWhere((e) => e.id == id);
+    await _save();
+    debugPrint('[DrivingLogStore] Deleted event $id');
+  }
+
   /// Tool handler for get_driving_log (trips only).
   Future<Map<String, dynamic>> toolGetDrivingLog(dynamic args) async {
     await init();

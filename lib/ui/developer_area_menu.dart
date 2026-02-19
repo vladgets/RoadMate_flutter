@@ -56,9 +56,9 @@ class _SettingsScreenState extends State<DeveloperAreaScreen> {
       body: ListView(
         children: [
           ListTile(
-            leading: const Icon(Icons.directions_car_outlined),
-            title: const Text('Driving Log'),
-            subtitle: const Text('Trip start/stop events with location'),
+            leading: const Icon(Icons.history),
+            title: const Text('Activity Log'),
+            subtitle: const Text('Trips, visits, and parking events'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(context).push(

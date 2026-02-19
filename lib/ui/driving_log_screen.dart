@@ -105,8 +105,8 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Clear Driving Log?'),
-        content: const Text('This will delete all recorded driving events.'),
+        title: const Text('Clear Activity Log?'),
+        content: const Text('This will delete all trips and visits.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -133,7 +133,7 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Driving Log'),
+        title: const Text('Activity Log'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -185,9 +185,56 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
                           separatorBuilder: (_, i) => const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final event = _events[index];
-                            return _EventTile(
-                              event: event,
-                              onOpenMap: () => _openInMaps(event),
+                            return Dismissible(
+                              key: Key(event.id),
+                              direction: DismissDirection.endToStart,
+                              confirmDismiss: (direction) async {
+                                return await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Delete Event?'),
+                                    content: Text(
+                                      event.type == 'visit'
+                                          ? 'Delete this visit?'
+                                          : event.type == 'start'
+                                              ? 'Delete this trip start?'
+                                              : 'Delete this park event?',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, true),
+                                        child: const Text('Delete',
+                                            style: TextStyle(color: Colors.red)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              onDismissed: (direction) async {
+                                final messenger = ScaffoldMessenger.of(context);
+                                await DrivingLogStore.instance.deleteEvent(event.id);
+                                if (!mounted) return;
+                                setState(() {
+                                  _events.removeAt(index);
+                                });
+                                messenger.showSnackBar(
+                                  const SnackBar(content: Text('Event deleted')),
+                                );
+                              },
+                              background: Container(
+                                color: Colors.red,
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                child: const Icon(Icons.delete, color: Colors.white),
+                              ),
+                              child: _EventTile(
+                                event: event,
+                                onOpenMap: () => _openInMaps(event),
+                              ),
                             );
                           },
                         ),
