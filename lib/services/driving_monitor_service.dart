@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:activity_recognition_flutter/activity_recognition_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -71,6 +72,12 @@ class DrivingMonitorService {
         }
       : null;
 
+  // ---- SharedPreferences keys for visit state persistence ----
+  static const _kVisitStartTs = 'dart_visit_start_ts';
+  static const _kVisitLastTs = 'dart_visit_last_ts';
+  static const _kVisitLat = 'dart_visit_lat';
+  static const _kVisitLon = 'dart_visit_lon';
+
   // ---- Throttle ----
   DateTime? _lastAlivePing;
 
@@ -81,6 +88,7 @@ class DrivingMonitorService {
 
     await _initNotifications();
     await NamedPlacesStore.instance.init();
+    await _restoreVisitState(); // reload persisted visit start time before draining native events
     await _pingAlive();
 
     if (Platform.isAndroid) {
@@ -191,6 +199,7 @@ class DrivingMonitorService {
         _visitStartTime = DateTime.now();
         _visitLastTime = DateTime.now();
         _visitActive = true;
+        unawaited(_saveVisitState());
         debugPrint('[DrivingMonitor] Visit tracking started at $lat, $lon');
         return;
       }
@@ -198,12 +207,13 @@ class DrivingMonitorService {
       final dist = _distanceM(_visitLat!, _visitLon!, lat, lon);
       if (dist <= _visitRadiusM) {
         _visitLastTime = DateTime.now();
+        unawaited(_saveVisitState()); // keep last-seen time fresh across restarts
         debugPrint('[DrivingMonitor] Visit same location (${dist.toStringAsFixed(0)}m), '
             '${DateTime.now().difference(_visitStartTime!).inMinutes}min elapsed');
       } else {
         // Moved to a different location — close current visit if it qualifies
         debugPrint('[DrivingMonitor] Moved ${dist.toStringAsFixed(0)}m from visit location');
-        await _maybeCloseVisit();
+        await _maybeCloseVisit(); // also clears persisted state
         // Start fresh at new location
         _visitLat = lat;
         _visitLon = lon;
@@ -211,6 +221,7 @@ class DrivingMonitorService {
         _visitStartTime = DateTime.now();
         _visitLastTime = DateTime.now();
         _visitActive = true;
+        unawaited(_saveVisitState());
       }
     } catch (e) {
       debugPrint('[DrivingMonitor] _onStillActivity error: $e');
@@ -233,6 +244,7 @@ class DrivingMonitorService {
     _visitStartTime = null;
     _visitLastTime = null;
     _visitLocation = null;
+    unawaited(_clearVisitState());
 
     final thresholdMin = await NamedPlacesStore.instance.getVisitThresholdMinutes();
     final durationMin = end.difference(start).inMinutes;
@@ -365,6 +377,53 @@ class DrivingMonitorService {
       }
     } catch (e) {
       debugPrint('[DrivingMonitor] Failed to drain native events: $e');
+    }
+  }
+
+  // ---- Visit state persistence ----
+
+  Future<void> _saveVisitState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_kVisitStartTs, _visitStartTime!.millisecondsSinceEpoch);
+      await prefs.setInt(_kVisitLastTs, _visitLastTime!.millisecondsSinceEpoch);
+      await prefs.setDouble(_kVisitLat, _visitLat!);
+      await prefs.setDouble(_kVisitLon, _visitLon!);
+    } catch (_) {}
+  }
+
+  Future<void> _clearVisitState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kVisitStartTs);
+      await prefs.remove(_kVisitLastTs);
+      await prefs.remove(_kVisitLat);
+      await prefs.remove(_kVisitLon);
+    } catch (_) {}
+  }
+
+  Future<void> _restoreVisitState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final startTs = prefs.getInt(_kVisitStartTs);
+      if (startTs == null) return;
+      final lastTs = prefs.getInt(_kVisitLastTs);
+      final lat = prefs.getDouble(_kVisitLat);
+      final lon = prefs.getDouble(_kVisitLon);
+      if (lat == null || lon == null) return;
+
+      _visitStartTime = DateTime.fromMillisecondsSinceEpoch(startTs);
+      _visitLastTime = lastTs != null
+          ? DateTime.fromMillisecondsSinceEpoch(lastTs)
+          : DateTime.now();
+      _visitLat = lat;
+      _visitLon = lon;
+      _visitLocation = {'ok': true, 'lat': lat, 'lon': lon};
+      _visitActive = true;
+      debugPrint('[DrivingMonitor] Restored visit state: started '
+          '${DateTime.now().difference(_visitStartTime!).inMinutes}min ago at $lat, $lon');
+    } catch (e) {
+      debugPrint('[DrivingMonitor] Could not restore visit state: $e');
     }
   }
 
