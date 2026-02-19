@@ -3,6 +3,7 @@ import 'package:activity_recognition_flutter/activity_recognition_flutter.dart';
 import 'package:flutter/material.dart';
 import 'youtube_history_screen.dart';
 import 'driving_log_screen.dart';
+import 'activity_settings_screen.dart';
 import '../services/photo_index_service.dart';
 import '../services/driving_monitor_service.dart';
 import '../services/named_places_store.dart';
@@ -19,13 +20,11 @@ class DeveloperAreaScreen extends StatefulWidget {
 class _SettingsScreenState extends State<DeveloperAreaScreen> {
   bool _greetingEnabled = false;
   String _greetingPhrase = "Hello, how can I help you?";
-  int _visitThresholdMinutes = 10;
 
   @override
   void initState() {
     super.initState();
     _loadGreetingSettings();
-    _loadVisitThreshold();
   }
 
   Future<void> _loadGreetingSettings() async {
@@ -35,11 +34,6 @@ class _SettingsScreenState extends State<DeveloperAreaScreen> {
       _greetingEnabled = enabled;
       _greetingPhrase = phrase;
     });
-  }
-
-  Future<void> _loadVisitThreshold() async {
-    final t = await NamedPlacesStore.instance.getVisitThresholdMinutes();
-    setState(() => _visitThresholdMinutes = t);
   }
 
   @override
@@ -68,45 +62,16 @@ class _SettingsScreenState extends State<DeveloperAreaScreen> {
           ),
           const _ActivityFeed(),
           const Divider(),
-          // Visit threshold setting
+          // Activity settings
           ListTile(
-            leading: const Icon(Icons.location_on_outlined),
-            title: const Text('Place Visit Threshold'),
-            subtitle: Text('$_visitThresholdMinutes minutes — stay this long to log a visit'),
-            trailing: const Icon(Icons.edit),
-            onTap: () async {
-              final controller = TextEditingController(
-                  text: _visitThresholdMinutes.toString());
-              final result = await showDialog<String>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Visit Threshold (minutes)'),
-                  content: TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g. 2 for testing, 10 for production',
-                    ),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, controller.text),
-                      child: const Text('Save'),
-                    ),
-                  ],
-                ),
+            leading: const Icon(Icons.tune),
+            title: const Text('Activity Settings'),
+            subtitle: const Text('Visit threshold, POI lookup'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ActivitySettingsScreen()),
               );
-              if (result != null) {
-                final minutes = int.tryParse(result.trim());
-                if (minutes != null && minutes >= 1) {
-                  await NamedPlacesStore.instance.setVisitThresholdMinutes(minutes);
-                  setState(() => _visitThresholdMinutes = minutes);
-                }
-              }
             },
           ),
           const Divider(),

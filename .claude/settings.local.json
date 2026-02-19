@@ -27,7 +27,20 @@
       "Bash(grep:*)",
       "Bash(flutter build:*)",
       "Bash(flutter test:*)",
-      "Bash(flutter pub:*)"
+      "Bash(flutter pub:*)",
+      "Bash(git revert:*)",
+      "Bash(rsync:*)",
+      "Bash(/Users/vladgets/Development/road_mate_flutter/android/app/src/main/kotlin/com/example/road_mate_flutter/VoiceTriggerReceiver.kt << 'EOF'\npackage com.example.road_mate_flutter\n\nimport android.content.BroadcastReceiver\nimport android.content.Context\nimport android.content.Intent\nimport android.util.Log\n\n/**\n * Manifest-declared receiver for voice trigger broadcasts.\n * Always active regardless of whether MainActivity is alive.\n * Starts/resumes MainActivity with a TRIGGER_VOICE intent handled in onNewIntent.\n */\nclass VoiceTriggerReceiver : BroadcastReceiver\\(\\) {\n    override fun onReceive\\(context: Context, intent: Intent\\) {\n        Log.d\\(\"RoadMateA11y\", \"VoiceTriggerReceiver: received ${intent.action} — launching MainActivity with TRIGGER_VOICE\"\\)\n        val launch = Intent\\(context, MainActivity::class.java\\).apply {\n            action = \"com.example.road_mate_flutter.TRIGGER_VOICE\"\n            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP\n        }\n        context.startActivity\\(launch\\)\n    }\n}\nEOF)",
+      "Bash(git -C /Users/vladgets/Development/road_mate_flutter status)",
+      "Bash(git -C /Users/vladgets/Development/road_mate_flutter diff --staged --stat)",
+      "Bash(git -C /Users/vladgets/Development/road_mate_flutter log --oneline -3)",
+      "Bash(git -C /Users/vladgets/Development/road_mate_flutter commit -m \"$\\(cat <<''EOF''\nAdd Quick Settings tile to trigger voice session from any app\n\n- VoiceTileService: QS tile that starts/stops voice; reflects active state\n- VoiceTriggerReceiver: manifest-declared receiver as fallback entry point\n- MainActivity: handles TRIGGER_VOICE/STOP_VOICE intents via onNewIntent;\n  roadmate/tile channel syncs tile state; roadmate/navigation for minimize\n- app_control_service.dart: setTileActive\\(\\), moveToBackground\\(\\) helpers\n- main.dart: tile callbacks, setTileActive on connect/disconnect,\n  _minimizeWhenFgsReady\\(\\) polls until FGS starts before going to background\n  \\(fixes Android 14+ SecurityException on first run\\)\n- Remove floating accessibility button code \\(broken on Android 12+\\)\n- Add local flutter_accessibility_service path override \\(class name fix\\)\n- docs/QS_TILE_VOICE_TRIGGER.md: feature design summary\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C /Users/vladgets/Development/road_mate_flutter push origin main)",
+      "WebFetch(domain:pub.dev)",
+      "WebFetch(domain:github.com)",
+      "Bash(git -C /Users/vladgets/Development/road_mate_flutter diff --stat)",
+      "Bash(git -C /Users/vladgets/Development/road_mate_flutter add:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

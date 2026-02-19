@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:http/http.dart' as http;
 import 'named_places_store.dart';
+import '../config.dart';
 
 /// A single driving or place-visit event.
 /// type: 'start' | 'park' | 'visit'
@@ -153,10 +155,13 @@ class DrivingLogStore {
       }
     }
 
-    // Auto-label if this location matches a named place
+    // Auto-label: check named places first, then try POI lookup if enabled
     String? label;
     if (lat != null && lon != null) {
       label = NamedPlacesStore.instance.findNearest(lat, lon)?.label;
+      if (label == null && await NamedPlacesStore.instance.getPoiLookupEnabled()) {
+        label = await _fetchPoiName(lat, lon);
+      }
     }
 
     final event = DrivingEvent(
@@ -208,6 +213,26 @@ class DrivingLogStore {
     debugPrint('[DrivingLogStore] Deleted event $id');
   }
 
+  /// Update the label of a visit event.
+  Future<void> updateEventLabel(String id, String label) async {
+    await init();
+    final index = _events.indexWhere((e) => e.id == id);
+    if (index == -1) return;
+    final old = _events[index];
+    _events[index] = DrivingEvent(
+      id: old.id,
+      type: old.type,
+      timestamp: old.timestamp,
+      endTimestamp: old.endTimestamp,
+      lat: old.lat,
+      lon: old.lon,
+      address: old.address,
+      label: label.trim().isEmpty ? null : label.trim(),
+    );
+    await _save();
+    debugPrint('[DrivingLogStore] Updated label for $id: "$label"');
+  }
+
   /// Tool handler for get_driving_log (trips only).
   Future<Map<String, dynamic>> toolGetDrivingLog(dynamic args) async {
     await init();
@@ -246,6 +271,29 @@ class DrivingLogStore {
   }
 
   // ---- Internal ----
+
+  Future<String?> _fetchPoiName(double lat, double lon) async {
+    try {
+      final url = Uri.parse('${Config.serverUrl}/nominatim/reverse');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'lat': lat, 'lon': lon}),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final poiName = data['poi_name'] as String?;
+        if (poiName != null && poiName.isNotEmpty) {
+          debugPrint('[DrivingLogStore] POI lookup: $poiName');
+          return poiName;
+        }
+      }
+    } catch (e) {
+      debugPrint('[DrivingLogStore] POI lookup failed: $e');
+    }
+    return null;
+  }
 
   Future<void> _load() async {
     try {

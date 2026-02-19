@@ -127,6 +127,40 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
     );
   }
 
+  Future<void> _editVisitLabel(DrivingEvent event) async {
+    final controller = TextEditingController(text: event.label ?? '');
+    final newLabel = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Visit Label'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'e.g., Home, Work, Gym',
+            labelText: 'Label',
+          ),
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (newLabel == null || !mounted) return;
+
+    await DrivingLogStore.instance.updateEventLabel(event.id, newLabel);
+    _load(); // Reload to reflect changes
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentVisit = DrivingMonitorService.instance.currentVisit;
@@ -234,6 +268,9 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
                               child: _EventTile(
                                 event: event,
                                 onOpenMap: () => _openInMaps(event),
+                                onEditLabel: event.type == 'visit'
+                                    ? () => _editVisitLabel(event)
+                                    : null,
                               ),
                             );
                           },
@@ -293,10 +330,15 @@ class _OngoingVisitBanner extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _EventTile extends StatelessWidget {
-  const _EventTile({required this.event, required this.onOpenMap});
+  const _EventTile({
+    required this.event,
+    required this.onOpenMap,
+    this.onEditLabel,
+  });
 
   final DrivingEvent event;
   final VoidCallback onOpenMap;
+  final VoidCallback? onEditLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -329,7 +371,19 @@ class _EventTile extends StatelessWidget {
         backgroundColor: iconColor.withValues(alpha: 0.12),
         child: Icon(icon, color: iconColor, size: 20),
       ),
-      title: Text(label),
+      title: onEditLabel != null
+          ? InkWell(
+              onTap: onEditLabel,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label),
+                  const SizedBox(width: 6),
+                  Icon(Icons.edit, size: 14, color: Colors.grey[600]),
+                ],
+              ),
+            )
+          : Text(label),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

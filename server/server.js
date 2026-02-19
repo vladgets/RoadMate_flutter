@@ -4,6 +4,7 @@ import { registerGoogleMapsRoutes } from "./google_maps.js";
 import { registerYouTubeRoutes } from "./youtube.js";
 import { registerCollageRoutes } from "./collage.js";
 import { registerWhatsAppBaileysRoutes } from "./whatsapp_baileys.js";
+import { registerNominatimRoutes } from "./nominatim.js";
 
 const app = express();
 app.use(express.json());
@@ -13,6 +14,7 @@ registerGoogleMapsRoutes(app);
 registerYouTubeRoutes(app);
 registerCollageRoutes(app);
 registerWhatsAppBaileysRoutes(app);
+registerNominatimRoutes(app);
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 

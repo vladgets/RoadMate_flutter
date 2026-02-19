@@ -39,6 +39,7 @@ class NamedPlacesStore {
 
   static const _placesKey = 'named_places_v1';
   static const _thresholdKey = 'visit_threshold_minutes';
+  static const _poiLookupKey = 'poi_lookup_enabled';
   static const _defaultThreshold = 10;
 
   List<NamedPlace> _places = [];
@@ -86,6 +87,17 @@ class NamedPlacesStore {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_thresholdKey, minutes);
     debugPrint('[NamedPlacesStore] Visit threshold set to ${minutes}min');
+  }
+
+  Future<bool> getPoiLookupEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_poiLookupKey) ?? true; // default enabled
+  }
+
+  Future<void> setPoiLookupEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_poiLookupKey, enabled);
+    debugPrint('[NamedPlacesStore] POI lookup ${enabled ? 'enabled' : 'disabled'}');
   }
 
   /// Tool handler: saves the user's current GPS position as a named place.
