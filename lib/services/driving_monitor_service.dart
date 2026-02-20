@@ -66,6 +66,7 @@ class DrivingMonitorService {
   int _vehicleReadings = 0;
   int _stillReadings = 0; // debounce for trip-stop, mirrors _vehicleReadings
   DateTime? _stillSince; // when the current continuous still phase began
+  DateTime? _firstVehicleTime; // time of the very first inVehicle signal this trip
   Map<String, dynamic>? _firstStillLocation; // GPS snapped at the first still event
   Map<String, dynamic>? _lastVehicleLocation;
   DateTime? _lastVehicleLocationTs;
@@ -176,6 +177,7 @@ class DrivingMonitorService {
     _vehicleReadings = 0;
     _stillReadings = 0;
     _stillSince = null;
+    _firstVehicleTime = null;
     _firstStillLocation = null;
     _visitActive = false;
     debugPrint('[DrivingMonitor] Stopped');
@@ -219,17 +221,27 @@ class DrivingMonitorService {
         _stillReadings = 0; // any vehicle reading cancels the stop debounce
         _stillSince = null; // car is moving again
         _firstStillLocation = null; // previous stop was a false alarm
-        unawaited(_refreshVehicleLocation());
+        if (_vehicleReadings == 1) {
+          // Snap time and location at the very first vehicle signal so the
+          // confirmed trip-start event uses these rather than the debounce time.
+          _firstVehicleTime ??= DateTime.now();
+          unawaited(_refreshVehicleLocationForced());
+        } else {
+          unawaited(_refreshVehicleLocation());
+        }
         if (_vehicleReadings >= _debounceCount && !_isDriving) {
           _isDriving = true;
+          final firstTime = _firstVehicleTime;
+          _firstVehicleTime = null;
           _lastVehicleLocation = null;
           _lastVehicleLocationTs = null;
-          _onDrivingStarted();
+          _onDrivingStarted(firstTime: firstTime);
         }
         break;
 
       case ActivityType.still:
         _vehicleReadings = 0;
+        _firstVehicleTime = null; // reset for next trip
         _stillReadings++;
         if (_stillReadings == 1 && _isDriving) {
           // Snap GPS at the very first still event so the park location
@@ -244,8 +256,9 @@ class DrivingMonitorService {
           if (stillSecs >= _minStillDurationSecs) {
             _isDriving = false;
             _stillReadings = 0;
+            final firstStillTime = _stillSince; // capture before clearing
             _stillSince = null;
-            _onParked();
+            _onParked(firstStillTime: firstStillTime);
           }
         }
         break;
@@ -253,6 +266,7 @@ class DrivingMonitorService {
       case ActivityType.onFoot:
       case ActivityType.walking:
         _vehicleReadings = 0;
+        _firstVehicleTime = null; // reset for next trip
         _stillReadings++;
         if (_stillReadings == 1 && _isDriving) {
           unawaited(_snapFirstStillLocation());
@@ -266,8 +280,9 @@ class DrivingMonitorService {
           if (stillSecs >= _minWalkingDurationSecs) {
             _isDriving = false;
             _stillReadings = 0;
+            final firstStillTime = _stillSince; // capture before clearing
             _stillSince = null;
-            _onParked();
+            _onParked(firstStillTime: firstStillTime);
           }
         }
         break;
@@ -363,14 +378,16 @@ class DrivingMonitorService {
 
   // ---- Driving events ----
 
-  void _onDrivingStarted() {
+  void _onDrivingStarted({DateTime? firstTime}) {
     debugPrint('[DrivingMonitor] Driving started');
-    _captureAndLog('start', 'Trip started', 'Detecting your drive…');
+    _captureAndLog('start', 'Trip started', 'Detecting your drive…',
+        eventTime: firstTime);
   }
 
-  void _onParked() {
+  void _onParked({DateTime? firstStillTime}) {
     debugPrint('[DrivingMonitor] Parked');
-    _captureAndLog('park', 'You parked', 'Logging your parking spot…');
+    _captureAndLog('park', 'You parked', 'Logging your parking spot…',
+        eventTime: firstStillTime);
   }
 
   /// Snap GPS at the moment the car first goes still so we have an accurate
@@ -387,9 +404,10 @@ class DrivingMonitorService {
   }
 
   Future<void> _captureAndLog(
-      String type, String notifTitle, String notifBodyFallback) async {
+      String type, String notifTitle, String notifBodyFallback,
+      {DateTime? eventTime}) async {
     try {
-      final Map<String, dynamic> location;
+      Map<String, dynamic> location;
       if (type == 'park' && _firstStillLocation != null) {
         // Use the location snapped at the first still event — this is where
         // the car actually stopped, not where it is 90 s later.
@@ -401,9 +419,15 @@ class DrivingMonitorService {
         debugPrint('[DrivingMonitor] Using last-vehicle location for park event');
       } else {
         location = await getBestEffortBackgroundLocation();
+        // If live GPS failed, fall back to last known vehicle location.
+        if (location['ok'] != true && _lastVehicleLocation != null) {
+          location = _lastVehicleLocation!;
+          debugPrint('[DrivingMonitor] GPS unavailable — using last-vehicle location for $type event');
+        }
       }
 
-      final event = await DrivingLogStore.instance.logEvent(type, location);
+      final event = await DrivingLogStore.instance.logEvent(type, location,
+          eventTime: eventTime);
 
       final timeStr = DateFormat('h:mm a').format(DateTime.now());
       String body;
@@ -438,6 +462,21 @@ class DrivingMonitorService {
       if (loc['ok'] == true) {
         _lastVehicleLocation = loc;
         debugPrint('[DrivingMonitor] Vehicle location updated: '
+            '${loc['lat']}, ${loc['lon']}');
+      }
+    } catch (_) {}
+  }
+
+  /// Force an immediate location capture regardless of the throttle.
+  /// Called on the first vehicle reading so we have a location ready before
+  /// the trip-start debounce window completes.
+  Future<void> _refreshVehicleLocationForced() async {
+    try {
+      final loc = await getBestEffortBackgroundLocation();
+      if (loc['ok'] == true) {
+        _lastVehicleLocation = loc;
+        _lastVehicleLocationTs = DateTime.now();
+        debugPrint('[DrivingMonitor] Vehicle location force-captured: '
             '${loc['lat']}, ${loc['lon']}');
       }
     } catch (_) {}

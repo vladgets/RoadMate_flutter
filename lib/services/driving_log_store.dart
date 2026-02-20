@@ -86,7 +86,11 @@ class DrivingLogStore {
   List<DrivingEvent> get allEvents => List.unmodifiable(_events);
 
   /// Log a driving event. [type] is 'start' or 'park'.
-  Future<DrivingEvent> logEvent(String type, Map<String, dynamic> location) async {
+  /// [eventTime] overrides the timestamp — pass the time of the first signal
+  /// so the recorded time reflects when the event actually started rather than
+  /// when the debounce window completed.
+  Future<DrivingEvent> logEvent(String type, Map<String, dynamic> location,
+      {DateTime? eventTime}) async {
     await init();
 
     double? lat;
@@ -112,13 +116,14 @@ class DrivingLogStore {
     final event = DrivingEvent(
       id: _uuid.v4(),
       type: type,
-      timestamp: DateTime.now().toUtc().toIso8601String(),
+      timestamp: (eventTime?.toUtc() ?? DateTime.now().toUtc()).toIso8601String(),
       lat: lat,
       lon: lon,
       address: address,
     );
 
     _events.insert(0, event);
+    _sortEvents();
     if (_events.length > _maxEvents) {
       _events = _events.sublist(0, _maxEvents);
     }
@@ -176,6 +181,7 @@ class DrivingLogStore {
     );
 
     _events.insert(0, event);
+    _sortEvents();
     if (_events.length > _maxEvents) {
       _events = _events.sublist(0, _maxEvents);
     }
@@ -192,6 +198,7 @@ class DrivingLogStore {
   Future<void> insertEvent(DrivingEvent event) async {
     await init();
     _events.insert(0, event);
+    _sortEvents();
     if (_events.length > _maxEvents) {
       _events = _events.sublist(0, _maxEvents);
     }
@@ -272,6 +279,17 @@ class DrivingLogStore {
 
   // ---- Internal ----
 
+  /// Sort events newest-first by effective timestamp.
+  /// Visits use their end time so they appear at the position in the timeline
+  /// where they concluded (right before the next trip), not where they started.
+  void _sortEvents() {
+    _events.sort((a, b) {
+      final aTs = a.type == 'visit' ? (a.endTimestamp ?? a.timestamp) : a.timestamp;
+      final bTs = b.type == 'visit' ? (b.endTimestamp ?? b.timestamp) : b.timestamp;
+      return bTs.compareTo(aTs); // descending
+    });
+  }
+
   Future<String?> _fetchPoiName(double lat, double lon) async {
     try {
       final url = Uri.parse('${Config.serverUrl}/nominatim/reverse');
@@ -312,6 +330,7 @@ class DrivingLogStore {
           .whereType<Map>()
           .map((e) => DrivingEvent.fromJson(e.cast<String, dynamic>()))
           .toList();
+      _sortEvents();
     } catch (e) {
       debugPrint('[DrivingLogStore] Failed to load: $e');
       _events = [];
