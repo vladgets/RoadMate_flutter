@@ -58,6 +58,7 @@ class DrivingMonitorService {
   StreamSubscription<ActivityEvent>? _subscription;
   bool _isDriving = false;
   int _vehicleReadings = 0;
+  int _stillReadings = 0; // debounce for trip-stop, mirrors _vehicleReadings
   Map<String, dynamic>? _lastVehicleLocation;
   DateTime? _lastVehicleLocationTs;
 
@@ -165,6 +166,7 @@ class DrivingMonitorService {
     _subscription = null;
     _isDriving = false;
     _vehicleReadings = 0;
+    _stillReadings = 0;
     _visitActive = false;
     debugPrint('[DrivingMonitor] Stopped');
   }
@@ -180,6 +182,7 @@ class DrivingMonitorService {
     await _initNotifications();
     _isDriving = false;
     _vehicleReadings = 0;
+    _stillReadings = 0;
     _onParked();
   }
 
@@ -201,6 +204,7 @@ class DrivingMonitorService {
         // Close any active visit before registering driving
         unawaited(_maybeCloseVisit());
         _vehicleReadings++;
+        _stillReadings = 0; // any vehicle reading cancels the stop debounce
         unawaited(_refreshVehicleLocation());
         if (_vehicleReadings >= _debounceCount && !_isDriving) {
           _isDriving = true;
@@ -214,9 +218,15 @@ class DrivingMonitorService {
       case ActivityType.onFoot:
       case ActivityType.walking:
         _vehicleReadings = 0;
+        _stillReadings++;
         unawaited(_onStillActivity());
-        if (_isDriving) {
+        // Mirror the start-debounce: require _debounceCount consecutive
+        // non-vehicle readings before declaring parked. This prevents brief
+        // oscillations (e.g. at traffic lights or driveway) from logging
+        // spurious park+start pairs.
+        if (_isDriving && _stillReadings >= _debounceCount) {
           _isDriving = false;
+          _stillReadings = 0;
           _onParked();
         }
         break;

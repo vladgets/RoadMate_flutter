@@ -39,6 +39,7 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
         const val KEY_FLUTTER_ALIVE_TS = "flutter_alive_ts"
         private const val KEY_IS_DRIVING = "native_is_driving"
         private const val KEY_VEHICLE_COUNT = "native_vehicle_count"
+        private const val KEY_STILL_COUNT = "native_still_count"
         const val KEY_PENDING_EVENTS = "native_pending_events"
         private const val KEY_LAST_VEH_LAT = "native_last_veh_lat"
         private const val KEY_LAST_VEH_LON = "native_last_veh_lon"
@@ -83,13 +84,17 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
 
         val isDriving = prefs.getBoolean(KEY_IS_DRIVING, false)
         var vehicleCount = prefs.getInt(KEY_VEHICLE_COUNT, 0)
+        var stillCount = prefs.getInt(KEY_STILL_COUNT, 0)
 
         when (mostLikely.type) {
             DetectedActivity.IN_VEHICLE -> {
                 // Finalize any active visit before processing drive start
                 maybeFinalizeVisit(prefs)
                 vehicleCount++
-                prefs.edit().putInt(KEY_VEHICLE_COUNT, vehicleCount).apply()
+                prefs.edit()
+                    .putInt(KEY_VEHICLE_COUNT, vehicleCount)
+                    .putInt(KEY_STILL_COUNT, 0) // any vehicle reading cancels stop debounce
+                    .apply()
                 snapshotVehicleLocation(context, prefs)
                 if (vehicleCount >= DEBOUNCE_COUNT && !isDriving) {
                     prefs.edit().putBoolean(KEY_IS_DRIVING, true).apply()
@@ -100,9 +105,18 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
             DetectedActivity.ON_FOOT,
             DetectedActivity.WALKING -> {
                 handleVisitActivity(context, prefs)
-                prefs.edit().putInt(KEY_VEHICLE_COUNT, 0).apply()
-                if (isDriving) {
-                    prefs.edit().putBoolean(KEY_IS_DRIVING, false).apply()
+                stillCount++
+                prefs.edit()
+                    .putInt(KEY_VEHICLE_COUNT, 0)
+                    .putInt(KEY_STILL_COUNT, stillCount)
+                    .apply()
+                // Mirror start-debounce: require DEBOUNCE_COUNT consecutive non-vehicle
+                // readings before declaring parked to avoid spurious park+start pairs.
+                if (isDriving && stillCount >= DEBOUNCE_COUNT) {
+                    prefs.edit()
+                        .putBoolean(KEY_IS_DRIVING, false)
+                        .putInt(KEY_STILL_COUNT, 0)
+                        .apply()
                     onParked(context, prefs)
                 }
             }
