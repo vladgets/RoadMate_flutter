@@ -84,11 +84,13 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
       final utc = DateTime.parse(event.timestamp);
       final local = utc.toLocal();
       final now = DateTime.now();
-      final diff = now.difference(local);
+      final today = DateTime(now.year, now.month, now.day);
+      final eventDay = DateTime(local.year, local.month, local.day);
+      final dayDiff = today.difference(eventDay).inDays;
       final t = DateFormat('h:mm a').format(local);
-      if (diff.inDays == 0) {
+      if (dayDiff == 0) {
         timeStr = 'Today $t';
-      } else if (diff.inDays == 1) {
+      } else if (dayDiff == 1) {
         timeStr = 'Yesterday $t';
       } else {
         timeStr = DateFormat('MMM d, y • h:mm a').format(local);
@@ -551,11 +553,13 @@ class _EventTile extends StatelessWidget {
       final utc = DateTime.parse(iso);
       final local = utc.toLocal();
       final now = DateTime.now();
-      final diff = now.difference(local);
+      final today = DateTime(now.year, now.month, now.day);
+      final eventDay = DateTime(local.year, local.month, local.day);
+      final dayDiff = today.difference(eventDay).inDays;
       final timeStr = DateFormat('h:mm a').format(local);
-      if (diff.inDays == 0) return 'Today $timeStr';
-      if (diff.inDays == 1) return 'Yesterday $timeStr';
-      if (diff.inDays < 7) return '${diff.inDays}d ago $timeStr';
+      if (dayDiff == 0) return 'Today $timeStr';
+      if (dayDiff == 1) return 'Yesterday $timeStr';
+      if (dayDiff < 7) return '${dayDiff}d ago $timeStr';
       return DateFormat('MMM d, y • h:mm a').format(local);
     } catch (_) {
       return iso;
@@ -566,13 +570,15 @@ class _EventTile extends StatelessWidget {
     try {
       final start = DateTime.parse(event.timestamp).toLocal();
       final now = DateTime.now();
-      final diff = now.difference(start);
+      final today = DateTime(now.year, now.month, now.day);
+      final eventDay = DateTime(start.year, start.month, start.day);
+      final dayDiff = today.difference(eventDay).inDays;
       final startStr = DateFormat('h:mm a').format(start);
 
       String dayPrefix;
-      if (diff.inDays == 0) {
+      if (dayDiff == 0) {
         dayPrefix = 'Today';
-      } else if (diff.inDays == 1) {
+      } else if (dayDiff == 1) {
         dayPrefix = 'Yesterday';
       } else {
         dayPrefix = DateFormat('MMM d').format(start);
