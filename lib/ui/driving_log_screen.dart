@@ -42,6 +42,38 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
     });
   }
 
+  /// Returns a flat list alternating day-header strings and DrivingEvents.
+  List<Object> _buildRows() {
+    final rows = <Object>[];
+    String? lastDay;
+    for (final event in _events) {
+      final day = _dayLabel(event.timestamp);
+      if (day != lastDay) {
+        rows.add(day);
+        lastDay = day;
+      }
+      rows.add(event);
+    }
+    return rows;
+  }
+
+  String _dayLabel(String isoTimestamp) {
+    try {
+      final local = DateTime.parse(isoTimestamp).toLocal();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final eventDay = DateTime(local.year, local.month, local.day);
+      final diff = today.difference(eventDay).inDays;
+      if (diff == 0) return 'Today';
+      if (diff == 1) return 'Yesterday';
+      if (diff < 7) return DateFormat('EEEE').format(local); // e.g. Monday
+      if (local.year == now.year) return DateFormat('MMM d').format(local);
+      return DateFormat('MMM d, y').format(local);
+    } catch (_) {
+      return '';
+    }
+  }
+
   String _buildMapLabel(DrivingEvent event) {
     final isStart = event.type == 'start';
     final isVisit = event.type == 'visit';
@@ -226,73 +258,120 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
                             ],
                           ),
                         )
-                      : ListView.separated(
-                          itemCount: _events.length,
-                          separatorBuilder: (_, i) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final event = _events[index];
-                            return Dismissible(
-                              key: Key(event.id),
-                              direction: DismissDirection.endToStart,
-                              confirmDismiss: (direction) async {
-                                return await showDialog<bool>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    title: const Text('Delete Event?'),
-                                    content: Text(
-                                      event.type == 'visit'
-                                          ? 'Delete this visit?'
-                                          : event.type == 'start'
-                                              ? 'Delete this trip start?'
-                                              : 'Delete this park event?',
+                      : Builder(builder: (context) {
+                          final rows = _buildRows();
+                          return ListView.separated(
+                            itemCount: rows.length,
+                            separatorBuilder: (_, i) {
+                              // Suppress divider when adjacent to a day header.
+                              final afterHeader = rows[i] is String;
+                              final beforeHeader =
+                                  (i + 1 < rows.length) && rows[i + 1] is String;
+                              if (afterHeader || beforeHeader) {
+                                return const SizedBox.shrink();
+                              }
+                              return const Divider(height: 1);
+                            },
+                            itemBuilder: (context, index) {
+                              final row = rows[index];
+                              if (row is String) {
+                                return _DayHeader(label: row);
+                              }
+                              final event = row as DrivingEvent;
+                              return Dismissible(
+                                key: Key(event.id),
+                                direction: DismissDirection.endToStart,
+                                confirmDismiss: (direction) async {
+                                  return await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Delete Event?'),
+                                      content: Text(
+                                        event.type == 'visit'
+                                            ? 'Delete this visit?'
+                                            : event.type == 'start'
+                                                ? 'Delete this trip start?'
+                                                : 'Delete this park event?',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, false),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, true),
+                                          child: const Text('Delete',
+                                              style: TextStyle(
+                                                  color: Colors.red)),
+                                        ),
+                                      ],
                                     ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(ctx, false),
-                                        child: const Text('Cancel'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(ctx, true),
-                                        child: const Text('Delete',
-                                            style: TextStyle(color: Colors.red)),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                              onDismissed: (direction) async {
-                                final messenger = ScaffoldMessenger.of(context);
-                                await DrivingLogStore.instance.deleteEvent(event.id);
-                                if (!mounted) return;
-                                setState(() {
-                                  // Use ID-based removal so a stale index from
-                                  // an interim setState (e.g. visitUpdates) never
-                                  // removes the wrong item or throws a RangeError.
-                                  _events.removeWhere((e) => e.id == event.id);
-                                });
-                                messenger.showSnackBar(
-                                  const SnackBar(content: Text('Event deleted')),
-                                );
-                              },
-                              background: Container(
-                                color: Colors.red,
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 20),
-                                child: const Icon(Icons.delete, color: Colors.white),
-                              ),
-                              child: _EventTile(
-                                event: event,
-                                onOpenMap: () => _openInMaps(event),
-                                onEditLabel: event.type == 'visit'
-                                    ? () => _editVisitLabel(event)
-                                    : null,
-                              ),
-                            );
-                          },
-                        ),
+                                  );
+                                },
+                                onDismissed: (direction) async {
+                                  final messenger =
+                                      ScaffoldMessenger.of(context);
+                                  await DrivingLogStore.instance
+                                      .deleteEvent(event.id);
+                                  if (!mounted) return;
+                                  setState(() {
+                                    _events.removeWhere(
+                                        (e) => e.id == event.id);
+                                  });
+                                  messenger.showSnackBar(
+                                    const SnackBar(
+                                        content: Text('Event deleted')),
+                                  );
+                                },
+                                background: Container(
+                                  color: Colors.red,
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 20),
+                                  child: const Icon(Icons.delete,
+                                      color: Colors.white),
+                                ),
+                                child: _EventTile(
+                                  event: event,
+                                  onOpenMap: () => _openInMaps(event),
+                                  onEditLabel: event.type == 'visit'
+                                      ? () => _editVisitLabel(event)
+                                      : null,
+                                ),
+                              );
+                            },
+                          );
+                        }),
                 ),
               ],
             ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Day section header
+// ---------------------------------------------------------------------------
+
+class _DayHeader extends StatelessWidget {
+  const _DayHeader({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: Colors.grey[500],
+          letterSpacing: 0.4,
+        ),
+      ),
     );
   }
 }
