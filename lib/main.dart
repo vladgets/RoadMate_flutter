@@ -29,6 +29,7 @@ import 'services/conversation_store.dart';
 import 'services/photo_index_service.dart';
 import 'services/voice_memory_store.dart';
 import 'services/whatsapp_service.dart';
+import 'services/screenshot_service.dart';
 import 'services/app_control_service.dart';
 import 'services/driving_log_store.dart';
 import 'services/driving_monitor_service.dart';
@@ -923,7 +924,10 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   'search_voice_notes': (args) async {
     return await VoiceMemoryStore.instance.toolSearchMemories(args);
   },
-  // WhatsApp tool
+  // WhatsApp tools
+  'take_screenshot': (args) async {
+    return await ScreenshotService.instance.takeScreenshot();
+  },
   'send_whatsapp_message': (args) async {
     return await WhatsAppService.instance.toolSendWhatsAppMessage(args);
   },

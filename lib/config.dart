@@ -503,9 +503,22 @@ $trimmedPrefs''';
           "include_sender_name": {
             "type": "boolean",
             "description": "If true, prepend 'From [Your Name]:' to message"
+          },
+          "screenshot_path": {
+            "type": "string",
+            "description": "Optional: file path returned by take_screenshot. Use when the user wants to send a screenshot."
           }
         },
         "required": ["contact_name", "message"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "take_screenshot",
+      "description": "Take a screenshot of the current phone screen and save it as a PNG file. Returns the file path. Call this first, then pass the path to send_whatsapp_message via screenshot_path when the user asks to screenshot and send. Android only — requires Accessibility Service enabled.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
       }
     },
     // App voice control tools (Android only)

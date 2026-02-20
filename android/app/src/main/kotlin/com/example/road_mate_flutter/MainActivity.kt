@@ -115,6 +115,36 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        // Screenshot channel — delegates to the AccessibilityService (Android 11+).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "roadmate/screenshot")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "takeScreenshot" -> {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                            result.error("UNSUPPORTED", "Android 11+ required for screenshots", null)
+                            return@setMethodCallHandler
+                        }
+                        val service = RoadMateAccessibilityService.instance
+                        if (service == null) {
+                            result.error(
+                                "NO_SERVICE",
+                                "RoadMate Accessibility Service is not enabled. " +
+                                "Please enable it in Settings → Accessibility.",
+                                null
+                            )
+                            return@setMethodCallHandler
+                        }
+                        service.captureScreen { path ->
+                            runOnUiThread {
+                                if (path != null) result.success(path)
+                                else result.error("FAILED", "Screenshot capture failed", null)
+                            }
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
         // Native driving detection bridge.
         // Flutter calls setFlutterAlive to prevent the native receiver from
         // duplicating work while the Dart stream is subscribed.

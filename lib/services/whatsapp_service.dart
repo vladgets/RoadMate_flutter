@@ -30,6 +30,8 @@ class WhatsAppService {
       final photoLimit = (args['photo_limit'] as num?)?.toInt() ?? 1;
       final includeSenderName = args['include_sender_name'] as bool? ?? false;
 
+      final screenshotPath = args['screenshot_path'] as String?;
+
       // Validate required parameters
       if (contactName == null || contactName.isEmpty) {
         return {
@@ -68,10 +70,14 @@ class WhatsAppService {
       final baileysStatus = await WhatsAppBaileysService.instance.getStatus();
       final autoSend = baileysStatus.connected;
 
-      // Check if photo(s) are requested
+      // Resolve image: screenshot takes priority, then photo album search.
+      String? imagePath = screenshotPath;
       List<String>? photoPaths;
-      if (photoLocation != null || photoTime != null) {
+      if (imagePath == null && (photoLocation != null || photoTime != null)) {
         photoPaths = await _findPhotos(photoLocation, photoTime, photoLimit.clamp(1, 10));
+        if (photoPaths != null && photoPaths.isNotEmpty) {
+          imagePath = photoPaths.first;
+        }
       }
 
       // Clean phone number for all paths
@@ -82,13 +88,15 @@ class WhatsAppService {
         final sent = await WhatsAppBaileysService.instance.send(
           phone: cleanPhone,
           message: finalMessage,
-          imagePath: photoPaths?.isNotEmpty == true ? photoPaths!.first : null,
+          imagePath: imagePath,
         );
         if (sent) {
+          final hasImage = imagePath != null;
+          final imageDesc = screenshotPath != null ? 'screenshot' : 'photo';
           return {
             'status': 'success',
-            'message': photoPaths != null
-                ? 'WhatsApp message with photo sent automatically to ${contact.name}.'
+            'message': hasImage
+                ? 'WhatsApp message with $imageDesc sent automatically to ${contact.name}.'
                 : 'WhatsApp message sent automatically to ${contact.name}.',
             'contact': contact.name,
             'phone': contact.phoneNumber,
@@ -99,10 +107,14 @@ class WhatsAppService {
       }
 
       // ── Manual path (fallback: open WhatsApp) ───────────────────────────
-      if (photoPaths != null && photoPaths.isNotEmpty) {
-        final success = await _sendWithPhotos(contact.phoneNumber, finalMessage, photoPaths);
+      final allPhotoPaths = [
+        if (screenshotPath != null) screenshotPath,
+        ...?photoPaths,
+      ];
+      if (allPhotoPaths.isNotEmpty) {
+        final success = await _sendWithPhotos(contact.phoneNumber, finalMessage, allPhotoPaths);
         if (success) {
-          final count = photoPaths.length;
+          final count = allPhotoPaths.length;
           return {
             'status': 'success',
             'message': 'Share sheet opened with ${count == 1 ? 'your photo' : '$count photos'} and message. '
