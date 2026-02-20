@@ -37,7 +37,7 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
   Future<void> _load() async {
     await DrivingLogStore.instance.init();
     setState(() {
-      _events = DrivingLogStore.instance.getRecentEvents(200);
+      _events = List.of(DrivingLogStore.instance.getRecentEvents(200));
       _loading = false;
     });
   }
