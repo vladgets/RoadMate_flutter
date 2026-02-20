@@ -299,6 +299,17 @@ class _OngoingVisitBanner extends StatelessWidget {
       sinceStr = DateFormat('h:mm a').format(start);
     } catch (_) {}
 
+    final label = visitInfo['label'] as String?;
+    final address = visitInfo['address'] as String?;
+
+    // Build title: show label if available, otherwise generic text
+    String title;
+    if (label != null && label.isNotEmpty) {
+      title = sinceStr.isEmpty ? 'Visiting $label' : 'Visiting $label since $sinceStr';
+    } else {
+      title = sinceStr.isEmpty ? 'Visiting this location…' : 'Visiting since $sinceStr';
+    }
+
     return Container(
       color: Colors.indigo.withValues(alpha: 0.08),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -307,15 +318,32 @@ class _OngoingVisitBanner extends StatelessWidget {
           Icon(Icons.location_on, color: Colors.indigo[600], size: 20),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              sinceStr.isEmpty
-                  ? 'Visiting this location…'
-                  : 'Visiting since $sinceStr',
-              style: TextStyle(
-                color: Colors.indigo[700],
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: Colors.indigo[700],
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                  ),
+                ),
+                if (address != null && address.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      address,
+                      style: TextStyle(
+                        color: Colors.indigo[600],
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
             ),
           ),
           Icon(Icons.circle, size: 8, color: Colors.indigo[400]),

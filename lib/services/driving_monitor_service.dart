@@ -7,9 +7,11 @@ import 'package:activity_recognition_flutter/activity_recognition_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
+import '../config.dart';
 import 'driving_log_store.dart';
 import 'named_places_store.dart';
 import 'geo_time_tools.dart';
@@ -64,19 +66,44 @@ class DrivingMonitorService {
 
   /// Non-null while a visit is being tracked (app alive).
   /// Used by DrivingLogScreen to show "Visiting since…" indicator.
-  Map<String, dynamic>? get currentVisit => _visitActive
-      ? {
-          'startTime': _visitStartTime!.toIso8601String(),
-          'lat': _visitLat,
-          'lon': _visitLon,
-        }
-      : null;
+  Map<String, dynamic>? get currentVisit {
+    if (!_visitActive) return null;
+
+    final result = <String, dynamic>{
+      'startTime': _visitStartTime!.toIso8601String(),
+      'lat': _visitLat,
+      'lon': _visitLon,
+    };
+
+    // Add address if available
+    if (_visitLocation != null && _visitLocation!['address'] != null) {
+      final addr = _visitLocation!['address'] as Map;
+      final parts = <String>[];
+      final street = addr['street'];
+      final city = addr['city'];
+      final state = addr['state'];
+      if (street != null && (street as String).isNotEmpty) parts.add(street);
+      if (city != null && (city as String).isNotEmpty) parts.add(city);
+      if (state != null && (state as String).isNotEmpty) parts.add(state);
+      if (parts.isNotEmpty) {
+        result['address'] = parts.join(', ');
+      }
+    }
+
+    // Add POI label if available
+    if (_visitLocation != null && _visitLocation!['poi_name'] != null) {
+      result['label'] = _visitLocation!['poi_name'];
+    }
+
+    return result;
+  }
 
   // ---- SharedPreferences keys for visit state persistence ----
   static const _kVisitStartTs = 'dart_visit_start_ts';
   static const _kVisitLastTs = 'dart_visit_last_ts';
   static const _kVisitLat = 'dart_visit_lat';
   static const _kVisitLon = 'dart_visit_lon';
+  static const _kVisitLocation = 'dart_visit_location'; // full location JSON
 
   // ---- Throttle ----
   DateTime? _lastAlivePing;
@@ -199,6 +226,7 @@ class DrivingMonitorService {
         _visitStartTime = DateTime.now();
         _visitLastTime = DateTime.now();
         _visitActive = true;
+        unawaited(_resolveVisitPlace(lat, lon)); // fetch POI name in background
         unawaited(_saveVisitState());
         debugPrint('[DrivingMonitor] Visit tracking started at $lat, $lon');
         return;
@@ -221,6 +249,7 @@ class DrivingMonitorService {
         _visitStartTime = DateTime.now();
         _visitLastTime = DateTime.now();
         _visitActive = true;
+        unawaited(_resolveVisitPlace(lat, lon)); // fetch POI name in background
         unawaited(_saveVisitState());
       }
     } catch (e) {
@@ -389,6 +418,9 @@ class DrivingMonitorService {
       await prefs.setInt(_kVisitLastTs, _visitLastTime!.millisecondsSinceEpoch);
       await prefs.setDouble(_kVisitLat, _visitLat!);
       await prefs.setDouble(_kVisitLon, _visitLon!);
+      if (_visitLocation != null) {
+        await prefs.setString(_kVisitLocation, jsonEncode(_visitLocation));
+      }
     } catch (_) {}
   }
 
@@ -399,6 +431,7 @@ class DrivingMonitorService {
       await prefs.remove(_kVisitLastTs);
       await prefs.remove(_kVisitLat);
       await prefs.remove(_kVisitLon);
+      await prefs.remove(_kVisitLocation);
     } catch (_) {}
   }
 
@@ -418,12 +451,63 @@ class DrivingMonitorService {
           : DateTime.now();
       _visitLat = lat;
       _visitLon = lon;
-      _visitLocation = {'ok': true, 'lat': lat, 'lon': lon};
+
+      // Restore full location JSON if available
+      final locationJson = prefs.getString(_kVisitLocation);
+      if (locationJson != null) {
+        try {
+          _visitLocation = jsonDecode(locationJson) as Map<String, dynamic>;
+        } catch (_) {
+          _visitLocation = {'ok': true, 'lat': lat, 'lon': lon};
+        }
+      } else {
+        _visitLocation = {'ok': true, 'lat': lat, 'lon': lon};
+      }
+
       _visitActive = true;
       debugPrint('[DrivingMonitor] Restored visit state: started '
           '${DateTime.now().difference(_visitStartTime!).inMinutes}min ago at $lat, $lon');
     } catch (e) {
       debugPrint('[DrivingMonitor] Could not restore visit state: $e');
+    }
+  }
+
+  /// Resolve POI name for the current visit location.
+  /// Checks named places first, then queries Nominatim if POI lookup is enabled.
+  Future<void> _resolveVisitPlace(double lat, double lon) async {
+    try {
+      // Check named places first
+      final namedPlace = NamedPlacesStore.instance.findNearest(lat, lon);
+      if (namedPlace != null) {
+        if (_visitLocation != null) {
+          _visitLocation!['poi_name'] = namedPlace.label;
+        }
+        unawaited(_saveVisitState());
+        debugPrint('[DrivingMonitor] Visit at named place: ${namedPlace.label}');
+        return;
+      }
+
+      // POI lookup via Nominatim if enabled
+      if (!await NamedPlacesStore.instance.getPoiLookupEnabled()) return;
+
+      final url = Uri.parse('${Config.serverUrl}/nominatim/reverse');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'lat': lat, 'lon': lon}),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final poiName = data['poi_name'] as String?;
+        if (poiName != null && poiName.isNotEmpty && _visitLocation != null) {
+          _visitLocation!['poi_name'] = poiName;
+          unawaited(_saveVisitState());
+          debugPrint('[DrivingMonitor] Visit POI resolved: $poiName');
+        }
+      }
+    } catch (e) {
+      debugPrint('[DrivingMonitor] POI resolution failed: $e');
     }
   }
 

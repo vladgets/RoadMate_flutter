@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/named_places_store.dart';
 import '../services/geo_time_tools.dart';
-import '../services/driving_log_store.dart';
 
 class ActivitySettingsScreen extends StatefulWidget {
   const ActivitySettingsScreen({super.key});
@@ -104,15 +103,6 @@ class _ActivitySettingsScreenState extends State<ActivitySettingsScreen> {
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ),
-          const Divider(),
-          // Migration button
-          ListTile(
-            leading: const Icon(Icons.update),
-            title: const Text('Update Existing Events'),
-            subtitle: const Text('Add addresses and POI names to old events'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _migrateExistingEvents,
-          ),
           const Divider(),
           // Named Places section
           const Padding(
@@ -258,102 +248,5 @@ class _ActivitySettingsScreenState extends State<ActivitySettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Deleted "$label"')),
     );
-  }
-
-  Future<void> _migrateExistingEvents() async {
-    // Show confirmation dialog
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Update Existing Events?'),
-        content: const Text(
-          'This will update all existing events that have coordinates but no address or POI name.\n\n'
-          'The process may take a few minutes depending on how many events you have. '
-          'Each request waits 1 second to respect OpenStreetMap rate limits.\n\n'
-          'Continue?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Update'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true || !mounted) return;
-
-    // Show progress dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Expanded(
-              child: Text(
-                'Updating events...\nThis may take a few minutes.',
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    // Run migration
-    final result = await DrivingLogStore.instance.migrateExistingEvents();
-
-    // Close progress dialog
-    if (!mounted) return;
-    Navigator.pop(context);
-
-    // Show result
-    final updated = result['updated'] as int;
-    final total = result['total'] as int;
-    final errors = result['errors'] as List<dynamic>;
-
-    if (!mounted) return;
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Migration Complete'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Updated: $updated events'),
-              Text('Total events: $total'),
-              if (errors.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                const Text(
-                  'Errors:',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
-                ),
-                ...errors.map((e) => Text(
-                      '• $e',
-                      style: const TextStyle(fontSize: 12),
-                    )),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-
-    // Reload settings to show any new named places that might have been found
-    await _loadSettings();
   }
 }
