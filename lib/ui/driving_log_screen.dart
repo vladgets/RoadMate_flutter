@@ -377,7 +377,12 @@ class _EventTile extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(label),
+                  Flexible(
+                    child: Text(
+                      label,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   const SizedBox(width: 6),
                   Icon(Icons.edit, size: 14, color: Colors.grey[600]),
                 ],
