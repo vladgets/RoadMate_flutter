@@ -327,4 +327,109 @@ class DrivingLogStore {
       debugPrint('[DrivingLogStore] Failed to save: $e');
     }
   }
+
+  /// One-time migration: update existing events with addresses and POI names.
+  /// Returns a map with 'ok', 'updated' count, and optional 'error'.
+  Future<Map<String, dynamic>> migrateExistingEvents() async {
+    await init();
+    int updated = 0;
+    final errors = <String>[];
+
+    for (int i = 0; i < _events.length; i++) {
+      final event = _events[i];
+
+      // Skip if no coordinates
+      if (event.lat == null || event.lon == null) continue;
+
+      // Skip if already has both address and label (for visits) or address (for trips)
+      if (event.type == 'visit' && event.address != null && event.label != null) continue;
+      if (event.type != 'visit' && event.address != null) continue;
+
+      try {
+        // Fetch address and POI from Nominatim
+        final url = Uri.parse('${Config.serverUrl}/nominatim/reverse');
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'lat': event.lat, 'lon': event.lon}),
+        ).timeout(const Duration(seconds: 5));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final address = data['address'] as String?;
+          final poiName = data['poi_name'] as String?;
+
+          // Build address string from components (same logic as logEvent/logVisit)
+          String? formattedAddress;
+          if (address != null && address.isNotEmpty) {
+            // Nominatim returns full formatted address, but we want short form
+            // Parse it to extract street, city, state
+            final parts = address.split(', ');
+            if (parts.length >= 3) {
+              formattedAddress = parts.take(3).join(', ');
+            } else {
+              formattedAddress = address;
+            }
+          }
+
+          // Update event only if we got new data
+          bool needsUpdate = false;
+          String? newAddress = event.address;
+          String? newLabel = event.label;
+
+          if (formattedAddress != null && event.address == null) {
+            newAddress = formattedAddress;
+            needsUpdate = true;
+          }
+
+          // For visits, check named places first, then POI
+          if (event.type == 'visit' && event.label == null) {
+            final namedPlace = NamedPlacesStore.instance.findNearest(event.lat!, event.lon!);
+            if (namedPlace != null) {
+              newLabel = namedPlace.label;
+              needsUpdate = true;
+            } else if (await NamedPlacesStore.instance.getPoiLookupEnabled() &&
+                       poiName != null && poiName.isNotEmpty) {
+              newLabel = poiName;
+              needsUpdate = true;
+            }
+          }
+
+          if (needsUpdate) {
+            _events[i] = DrivingEvent(
+              id: event.id,
+              type: event.type,
+              timestamp: event.timestamp,
+              endTimestamp: event.endTimestamp,
+              lat: event.lat,
+              lon: event.lon,
+              address: newAddress,
+              label: newLabel,
+            );
+            updated++;
+          }
+        }
+      } catch (e) {
+        debugPrint('[DrivingLogStore] Migration failed for event ${event.id}: $e');
+        errors.add('${event.type} ${event.timestamp}: ${e.toString()}');
+      }
+
+      // Rate limiting: wait 1 second between requests to respect Nominatim usage policy
+      if (i < _events.length - 1) {
+        await Future.delayed(const Duration(seconds: 1));
+      }
+    }
+
+    if (updated > 0) {
+      await _save();
+    }
+
+    debugPrint('[DrivingLogStore] Migration complete: $updated events updated');
+    return {
+      'ok': true,
+      'updated': updated,
+      'total': _events.length,
+      'errors': errors,
+    };
+  }
 }
