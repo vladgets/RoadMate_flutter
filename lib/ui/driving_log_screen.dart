@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -15,11 +16,22 @@ class DrivingLogScreen extends StatefulWidget {
 class _DrivingLogScreenState extends State<DrivingLogScreen> {
   List<DrivingEvent> _events = [];
   bool _loading = true;
+  StreamSubscription<void>? _visitSub;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // Rebuild banner when POI resolves or visit state changes
+    _visitSub = DrivingMonitorService.instance.visitUpdates.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _visitSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {

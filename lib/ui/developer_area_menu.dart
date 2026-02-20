@@ -6,7 +6,6 @@ import 'driving_log_screen.dart';
 import 'activity_settings_screen.dart';
 import '../services/photo_index_service.dart';
 import '../services/driving_monitor_service.dart';
-import '../services/named_places_store.dart';
 import '../config.dart';
 
 

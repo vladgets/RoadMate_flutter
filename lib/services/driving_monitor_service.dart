@@ -49,6 +49,11 @@ class DrivingMonitorService {
       StreamController<ActivityEvent>.broadcast();
   Stream<ActivityEvent> get rawEvents => _rawEventController.stream;
 
+  // ---- Visit state stream (for UI refresh when POI resolves or visit changes) ----
+  final StreamController<void> _visitStateController =
+      StreamController<void>.broadcast();
+  Stream<void> get visitUpdates => _visitStateController.stream;
+
   // ---- Driving state ----
   StreamSubscription<ActivityEvent>? _subscription;
   bool _isDriving = false;
@@ -90,9 +95,21 @@ class DrivingMonitorService {
       }
     }
 
-    // Add POI label if available
-    if (_visitLocation != null && _visitLocation!['poi_name'] != null) {
-      result['label'] = _visitLocation!['poi_name'];
+    // Add POI label if available — prefer resolved poi_name, fall back to
+    // device geocoder's place name (available immediately from address map).
+    if (_visitLocation != null) {
+      final poiName = _visitLocation!['poi_name'] as String?;
+      if (poiName != null && poiName.isNotEmpty) {
+        result['label'] = poiName;
+      } else {
+        final addrObj = _visitLocation!['address'];
+        if (addrObj is Map) {
+          final placeName = addrObj['name'] as String?;
+          if (placeName != null && placeName.isNotEmpty) {
+            result['label'] = placeName;
+          }
+        }
+      }
     }
 
     return result;
@@ -226,6 +243,7 @@ class DrivingMonitorService {
         _visitStartTime = DateTime.now();
         _visitLastTime = DateTime.now();
         _visitActive = true;
+        _visitStateController.add(null);
         unawaited(_resolveVisitPlace(lat, lon)); // fetch POI name in background
         unawaited(_saveVisitState());
         debugPrint('[DrivingMonitor] Visit tracking started at $lat, $lon');
@@ -249,6 +267,7 @@ class DrivingMonitorService {
         _visitStartTime = DateTime.now();
         _visitLastTime = DateTime.now();
         _visitActive = true;
+        _visitStateController.add(null);
         unawaited(_resolveVisitPlace(lat, lon)); // fetch POI name in background
         unawaited(_saveVisitState());
       }
@@ -273,6 +292,7 @@ class DrivingMonitorService {
     _visitStartTime = null;
     _visitLastTime = null;
     _visitLocation = null;
+    _visitStateController.add(null);
     unawaited(_clearVisitState());
 
     final thresholdMin = await NamedPlacesStore.instance.getVisitThresholdMinutes();
@@ -467,6 +487,12 @@ class DrivingMonitorService {
       _visitActive = true;
       debugPrint('[DrivingMonitor] Restored visit state: started '
           '${DateTime.now().difference(_visitStartTime!).inMinutes}min ago at $lat, $lon');
+
+      // Re-resolve POI if it wasn't persisted (app was killed before resolution completed)
+      final hasPoi = _visitLocation!['poi_name'] != null;
+      if (!hasPoi) {
+        unawaited(_resolveVisitPlace(lat, lon));
+      }
     } catch (e) {
       debugPrint('[DrivingMonitor] Could not restore visit state: $e');
     }
@@ -481,6 +507,7 @@ class DrivingMonitorService {
       if (namedPlace != null) {
         if (_visitLocation != null) {
           _visitLocation!['poi_name'] = namedPlace.label;
+          _visitStateController.add(null);
         }
         unawaited(_saveVisitState());
         debugPrint('[DrivingMonitor] Visit at named place: ${namedPlace.label}');
@@ -502,6 +529,7 @@ class DrivingMonitorService {
         final poiName = data['poi_name'] as String?;
         if (poiName != null && poiName.isNotEmpty && _visitLocation != null) {
           _visitLocation!['poi_name'] = poiName;
+          _visitStateController.add(null);
           unawaited(_saveVisitState());
           debugPrint('[DrivingMonitor] Visit POI resolved: $poiName');
         }
