@@ -476,7 +476,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "send_whatsapp_message",
-      "description": "Send WhatsApp message (contact must be in memory). Can include photo.",
+      "description": "Send WhatsApp message (contact must be in memory). Can include one or more photos.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -490,11 +490,15 @@ $trimmedPrefs''';
           },
           "photo_location": {
             "type": "string",
-            "description": "Optional: location to find photo (e.g., 'Paris', 'home')"
+            "description": "Optional: location to find photo(s) (e.g., 'Paris', 'home')"
           },
           "photo_time": {
             "type": "string",
             "description": "Optional: time period (e.g., 'yesterday', 'last week')"
+          },
+          "photo_limit": {
+            "type": "integer",
+            "description": "Optional: number of photos to include (default: 1, max: 10). Use when user says 'send 3 photos' or 'send a few photos'."
           },
           "include_sender_name": {
             "type": "boolean",

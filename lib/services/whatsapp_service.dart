@@ -27,6 +27,7 @@ class WhatsAppService {
       final message = args['message'] as String?;
       final photoLocation = args['photo_location'] as String?;
       final photoTime = args['photo_time'] as String?;
+      final photoLimit = (args['photo_limit'] as num?)?.toInt() ?? 1;
       final includeSenderName = args['include_sender_name'] as bool? ?? false;
 
       // Validate required parameters
@@ -67,10 +68,10 @@ class WhatsAppService {
       final baileysStatus = await WhatsAppBaileysService.instance.getStatus();
       final autoSend = baileysStatus.connected;
 
-      // Check if photo is requested
-      String? photoPath;
+      // Check if photo(s) are requested
+      List<String>? photoPaths;
       if (photoLocation != null || photoTime != null) {
-        photoPath = await _findPhoto(photoLocation, photoTime);
+        photoPaths = await _findPhotos(photoLocation, photoTime, photoLimit.clamp(1, 10));
       }
 
       // Clean phone number for all paths
@@ -81,12 +82,12 @@ class WhatsAppService {
         final sent = await WhatsAppBaileysService.instance.send(
           phone: cleanPhone,
           message: finalMessage,
-          imagePath: photoPath,
+          imagePath: photoPaths?.isNotEmpty == true ? photoPaths!.first : null,
         );
         if (sent) {
           return {
             'status': 'success',
-            'message': photoPath != null
+            'message': photoPaths != null
                 ? 'WhatsApp message with photo sent automatically to ${contact.name}.'
                 : 'WhatsApp message sent automatically to ${contact.name}.',
             'contact': contact.name,
@@ -98,16 +99,18 @@ class WhatsAppService {
       }
 
       // ── Manual path (fallback: open WhatsApp) ───────────────────────────
-      if (photoPath != null) {
-        final success = await _sendWithPhoto(contact.phoneNumber, finalMessage, photoPath);
+      if (photoPaths != null && photoPaths.isNotEmpty) {
+        final success = await _sendWithPhotos(contact.phoneNumber, finalMessage, photoPaths);
         if (success) {
+          final count = photoPaths.length;
           return {
             'status': 'success',
-            'message': 'Share sheet opened with your photo and message. '
+            'message': 'Share sheet opened with ${count == 1 ? 'your photo' : '$count photos'} and message. '
                 'Select WhatsApp and choose ${contact.name} to send.',
             'contact': contact.name,
             'phone': contact.phoneNumber,
             'has_photo': true,
+            'photo_count': count,
           };
         }
         // Fallback to text-only if photo share failed.
@@ -191,42 +194,34 @@ class WhatsAppService {
     }
   }
 
-  /// Find photo by location and/or time.
-  Future<String?> _findPhoto(String? location, String? timePeriod) async {
+  /// Find photos by location and/or time. Returns up to [limit] temp file paths.
+  Future<List<String>?> _findPhotos(String? location, String? timePeriod, int limit) async {
     try {
       final results = await PhotoIndexService.instance.searchPhotos(
         location: location,
         timePeriod: timePeriod,
-        limit: 1,
+        limit: limit,
       );
 
-      if (results.isEmpty) {
-        return null;
-      }
+      if (results.isEmpty) return null;
 
-      final photoMetadata = results[0];
-      final photoId = photoMetadata.id;
-
-      // Get the actual photo file
-      final asset = await AssetEntity.fromId(photoId);
-      if (asset == null) {
-        return null;
-      }
-
-      // Copy photo to temp directory
-      final file = await asset.file;
-      if (file == null) {
-        return null;
-      }
-
-      // Copy to temp dir with unique name
       final tempDir = await getTemporaryDirectory();
-      final tempPath = '${tempDir.path}/whatsapp_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      await file.copy(tempPath);
+      final paths = <String>[];
+      final now = DateTime.now().millisecondsSinceEpoch;
 
-      return tempPath;
+      for (var i = 0; i < results.length; i++) {
+        final asset = await AssetEntity.fromId(results[i].id);
+        if (asset == null) continue;
+        final file = await asset.file;
+        if (file == null) continue;
+        final tempPath = '${tempDir.path}/whatsapp_${now}_$i.jpg';
+        await file.copy(tempPath);
+        paths.add(tempPath);
+      }
+
+      return paths.isEmpty ? null : paths;
     } catch (e) {
-      // debugPrint('Error finding photo: $e');
+      // debugPrint('Error finding photos: $e');
       return null;
     }
   }
@@ -256,45 +251,39 @@ class WhatsAppService {
     }
   }
 
-  /// Send message with photo via share intent.
+  /// Send message with one or more photos via share intent.
   /// Note: Due to platform limitations, we can't pre-select WhatsApp or recipient.
   /// User will need to choose WhatsApp and select recipient from share sheet.
-  Future<bool> _sendWithPhoto(String phoneNumber, String message, String photoPath) async {
+  Future<bool> _sendWithPhotos(String phoneNumber, String message, List<String> photoPaths) async {
     try {
-      // Use share_plus to share photo with message
-      // Note: Can't pre-select WhatsApp or recipient due to platform security
       final result = await Share.shareXFiles(
-        [XFile(photoPath)],
+        photoPaths.map((p) => XFile(p)).toList(),
         text: message,
       );
 
-      // Clean up temp file after a delay
+      // Clean up temp files after a delay
       Future.delayed(const Duration(seconds: 5), () {
-        try {
-          final file = File(photoPath);
-          if (file.existsSync()) {
-            file.delete();
+        for (final path in photoPaths) {
+          try {
+            final file = File(path);
+            if (file.existsSync()) file.delete();
+          } catch (e) {
+            // Silent fail
           }
-        } catch (e) {
-          // Silent fail
         }
       });
 
-      // Share was successful if user didn't dismiss
       return result.status != ShareResultStatus.dismissed;
     } catch (e) {
-      // debugPrint('Error sending WhatsApp with photo: $e');
-
-      // Clean up temp file on error
-      try {
-        final file = File(photoPath);
-        if (file.existsSync()) {
-          file.delete();
+      // debugPrint('Error sending WhatsApp with photos: $e');
+      for (final path in photoPaths) {
+        try {
+          final file = File(path);
+          if (file.existsSync()) file.delete();
+        } catch (e) {
+          // Silent fail
         }
-      } catch (e) {
-        // Silent fail
       }
-
       return false;
     }
   }
