@@ -32,6 +32,9 @@ class DrivingMonitorService {
   /// Minimum continuous still duration before a trip is considered ended.
   /// Prevents red-light stops (typically < 90 s) from triggering a park event.
   static const int _minStillDurationSecs = 90;
+  /// Shorter gate used when onFoot/walking is detected: person clearly left the
+  /// car, so we don't need a full 90-second wait.
+  static const int _minWalkingDurationSecs = 30;
 
   // ---- Notifications ----
   static const int _notifIdStart = 9001;
@@ -63,6 +66,7 @@ class DrivingMonitorService {
   int _vehicleReadings = 0;
   int _stillReadings = 0; // debounce for trip-stop, mirrors _vehicleReadings
   DateTime? _stillSince; // when the current continuous still phase began
+  Map<String, dynamic>? _firstStillLocation; // GPS snapped at the first still event
   Map<String, dynamic>? _lastVehicleLocation;
   DateTime? _lastVehicleLocationTs;
 
@@ -172,6 +176,7 @@ class DrivingMonitorService {
     _vehicleReadings = 0;
     _stillReadings = 0;
     _stillSince = null;
+    _firstStillLocation = null;
     _visitActive = false;
     debugPrint('[DrivingMonitor] Stopped');
   }
@@ -189,6 +194,7 @@ class DrivingMonitorService {
     _vehicleReadings = 0;
     _stillReadings = 0;
     _stillSince = null;
+    _firstStillLocation = null;
     _onParked();
   }
 
@@ -212,6 +218,7 @@ class DrivingMonitorService {
         _vehicleReadings++;
         _stillReadings = 0; // any vehicle reading cancels the stop debounce
         _stillSince = null; // car is moving again
+        _firstStillLocation = null; // previous stop was a false alarm
         unawaited(_refreshVehicleLocation());
         if (_vehicleReadings >= _debounceCount && !_isDriving) {
           _isDriving = true;
@@ -222,18 +229,41 @@ class DrivingMonitorService {
         break;
 
       case ActivityType.still:
+        _vehicleReadings = 0;
+        _stillReadings++;
+        if (_stillReadings == 1 && _isDriving) {
+          // Snap GPS at the very first still event so the park location
+          // reflects where the car stopped, not where it is 90 s later.
+          unawaited(_snapFirstStillLocation());
+        }
+        _stillSince ??= DateTime.now();
+        unawaited(_onStillActivity());
+        // still alone = could be traffic jam; apply full 90-second gate.
+        if (_isDriving && _stillReadings >= _debounceCount) {
+          final stillSecs = DateTime.now().difference(_stillSince!).inSeconds;
+          if (stillSecs >= _minStillDurationSecs) {
+            _isDriving = false;
+            _stillReadings = 0;
+            _stillSince = null;
+            _onParked();
+          }
+        }
+        break;
+
       case ActivityType.onFoot:
       case ActivityType.walking:
         _vehicleReadings = 0;
         _stillReadings++;
-        _stillSince ??= DateTime.now(); // record when the still phase began
+        if (_stillReadings == 1 && _isDriving) {
+          unawaited(_snapFirstStillLocation());
+        }
+        _stillSince ??= DateTime.now();
         unawaited(_onStillActivity());
-        // Require _debounceCount consecutive non-vehicle readings AND a minimum
-        // continuous still duration so that red-light stops (< 90 s) don't
-        // trigger a park event. Both conditions must be met together.
+        // Walking/onFoot means the person left the car — use a shorter gate so
+        // the park is logged promptly while the snapped location is still fresh.
         if (_isDriving && _stillReadings >= _debounceCount) {
           final stillSecs = DateTime.now().difference(_stillSince!).inSeconds;
-          if (stillSecs >= _minStillDurationSecs) {
+          if (stillSecs >= _minWalkingDurationSecs) {
             _isDriving = false;
             _stillReadings = 0;
             _stillSince = null;
@@ -343,13 +373,32 @@ class DrivingMonitorService {
     _captureAndLog('park', 'You parked', 'Logging your parking spot…');
   }
 
+  /// Snap GPS at the moment the car first goes still so we have an accurate
+  /// parking-spot location ready before the debounce window expires.
+  Future<void> _snapFirstStillLocation() async {
+    try {
+      final loc = await getBestEffortBackgroundLocation();
+      if (loc['ok'] == true) {
+        _firstStillLocation = loc;
+        debugPrint('[DrivingMonitor] First-still location snapped: '
+            '${loc['lat']}, ${loc['lon']}');
+      }
+    } catch (_) {}
+  }
+
   Future<void> _captureAndLog(
       String type, String notifTitle, String notifBodyFallback) async {
     try {
       final Map<String, dynamic> location;
-      if (type == 'park' && _lastVehicleLocation != null) {
+      if (type == 'park' && _firstStillLocation != null) {
+        // Use the location snapped at the first still event — this is where
+        // the car actually stopped, not where it is 90 s later.
+        location = _firstStillLocation!;
+        _firstStillLocation = null;
+        debugPrint('[DrivingMonitor] Using first-still location for park event');
+      } else if (type == 'park' && _lastVehicleLocation != null) {
         location = _lastVehicleLocation!;
-        debugPrint('[DrivingMonitor] Using saved vehicle location for park event');
+        debugPrint('[DrivingMonitor] Using last-vehicle location for park event');
       } else {
         location = await getBestEffortBackgroundLocation();
       }

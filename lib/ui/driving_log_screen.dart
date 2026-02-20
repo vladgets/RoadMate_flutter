@@ -265,7 +265,10 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
                                 await DrivingLogStore.instance.deleteEvent(event.id);
                                 if (!mounted) return;
                                 setState(() {
-                                  _events.removeAt(index);
+                                  // Use ID-based removal so a stale index from
+                                  // an interim setState (e.g. visitUpdates) never
+                                  // removes the wrong item or throws a RangeError.
+                                  _events.removeWhere((e) => e.id == event.id);
                                 });
                                 messenger.showSnackBar(
                                   const SnackBar(content: Text('Event deleted')),
