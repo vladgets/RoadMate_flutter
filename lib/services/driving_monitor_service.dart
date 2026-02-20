@@ -29,6 +29,9 @@ class DrivingMonitorService {
   static const int _debounceCount = 2;
   static const int _minConfidence = 60;
   static const double _visitRadiusM = 150.0;
+  /// Minimum continuous still duration before a trip is considered ended.
+  /// Prevents red-light stops (typically < 90 s) from triggering a park event.
+  static const int _minStillDurationSecs = 90;
 
   // ---- Notifications ----
   static const int _notifIdStart = 9001;
@@ -59,6 +62,7 @@ class DrivingMonitorService {
   bool _isDriving = false;
   int _vehicleReadings = 0;
   int _stillReadings = 0; // debounce for trip-stop, mirrors _vehicleReadings
+  DateTime? _stillSince; // when the current continuous still phase began
   Map<String, dynamic>? _lastVehicleLocation;
   DateTime? _lastVehicleLocationTs;
 
@@ -167,6 +171,7 @@ class DrivingMonitorService {
     _isDriving = false;
     _vehicleReadings = 0;
     _stillReadings = 0;
+    _stillSince = null;
     _visitActive = false;
     debugPrint('[DrivingMonitor] Stopped');
   }
@@ -183,6 +188,7 @@ class DrivingMonitorService {
     _isDriving = false;
     _vehicleReadings = 0;
     _stillReadings = 0;
+    _stillSince = null;
     _onParked();
   }
 
@@ -205,6 +211,7 @@ class DrivingMonitorService {
         unawaited(_maybeCloseVisit());
         _vehicleReadings++;
         _stillReadings = 0; // any vehicle reading cancels the stop debounce
+        _stillSince = null; // car is moving again
         unawaited(_refreshVehicleLocation());
         if (_vehicleReadings >= _debounceCount && !_isDriving) {
           _isDriving = true;
@@ -219,15 +226,19 @@ class DrivingMonitorService {
       case ActivityType.walking:
         _vehicleReadings = 0;
         _stillReadings++;
+        _stillSince ??= DateTime.now(); // record when the still phase began
         unawaited(_onStillActivity());
-        // Mirror the start-debounce: require _debounceCount consecutive
-        // non-vehicle readings before declaring parked. This prevents brief
-        // oscillations (e.g. at traffic lights or driveway) from logging
-        // spurious park+start pairs.
+        // Require _debounceCount consecutive non-vehicle readings AND a minimum
+        // continuous still duration so that red-light stops (< 90 s) don't
+        // trigger a park event. Both conditions must be met together.
         if (_isDriving && _stillReadings >= _debounceCount) {
-          _isDriving = false;
-          _stillReadings = 0;
-          _onParked();
+          final stillSecs = DateTime.now().difference(_stillSince!).inSeconds;
+          if (stillSecs >= _minStillDurationSecs) {
+            _isDriving = false;
+            _stillReadings = 0;
+            _stillSince = null;
+            _onParked();
+          }
         }
         break;
 

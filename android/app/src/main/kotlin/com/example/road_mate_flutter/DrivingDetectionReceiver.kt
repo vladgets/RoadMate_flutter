@@ -40,6 +40,7 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
         private const val KEY_IS_DRIVING = "native_is_driving"
         private const val KEY_VEHICLE_COUNT = "native_vehicle_count"
         private const val KEY_STILL_COUNT = "native_still_count"
+        private const val KEY_STILL_SINCE_TS = "native_still_since_ts"
         const val KEY_PENDING_EVENTS = "native_pending_events"
         private const val KEY_LAST_VEH_LAT = "native_last_veh_lat"
         private const val KEY_LAST_VEH_LON = "native_last_veh_lon"
@@ -59,6 +60,7 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
 
         private const val VISIT_RADIUS_M = 150f
         private const val VISIT_THRESHOLD_MS = 600_000L // 10 minutes
+        private const val MIN_STILL_DURATION_MS = 90_000L // 90 s — red-light guard
 
         private const val NOTIF_CHANNEL_ID = "roadmate_driving_monitor"
         private const val NOTIF_CHANNEL_NAME = "Driving Monitor"
@@ -93,7 +95,8 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
                 vehicleCount++
                 prefs.edit()
                     .putInt(KEY_VEHICLE_COUNT, vehicleCount)
-                    .putInt(KEY_STILL_COUNT, 0) // any vehicle reading cancels stop debounce
+                    .putInt(KEY_STILL_COUNT, 0)      // cancel stop debounce
+                    .remove(KEY_STILL_SINCE_TS)      // car is moving again
                     .apply()
                 snapshotVehicleLocation(context, prefs)
                 if (vehicleCount >= DEBOUNCE_COUNT && !isDriving) {
@@ -106,18 +109,29 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
             DetectedActivity.WALKING -> {
                 handleVisitActivity(context, prefs)
                 stillCount++
+                val now = System.currentTimeMillis()
+                // Record when the still phase began (only on first still after moving)
+                val stillSinceTs = prefs.getLong(KEY_STILL_SINCE_TS, 0L)
+                    .takeIf { it != 0L } ?: run {
+                        prefs.edit().putLong(KEY_STILL_SINCE_TS, now).apply()
+                        now
+                    }
                 prefs.edit()
                     .putInt(KEY_VEHICLE_COUNT, 0)
                     .putInt(KEY_STILL_COUNT, stillCount)
                     .apply()
-                // Mirror start-debounce: require DEBOUNCE_COUNT consecutive non-vehicle
-                // readings before declaring parked to avoid spurious park+start pairs.
+                // Mirror start-debounce AND enforce a minimum continuous still
+                // duration so red-light stops (< 90 s) don't trigger a park event.
                 if (isDriving && stillCount >= DEBOUNCE_COUNT) {
-                    prefs.edit()
-                        .putBoolean(KEY_IS_DRIVING, false)
-                        .putInt(KEY_STILL_COUNT, 0)
-                        .apply()
-                    onParked(context, prefs)
+                    val elapsed = now - stillSinceTs
+                    if (elapsed >= MIN_STILL_DURATION_MS) {
+                        prefs.edit()
+                            .putBoolean(KEY_IS_DRIVING, false)
+                            .putInt(KEY_STILL_COUNT, 0)
+                            .remove(KEY_STILL_SINCE_TS)
+                            .apply()
+                        onParked(context, prefs)
+                    }
                 }
             }
             else -> Unit
