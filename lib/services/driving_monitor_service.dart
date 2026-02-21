@@ -211,6 +211,16 @@ class DrivingMonitorService {
     _rawEventController.add(event);
     unawaited(_pingAlive());
 
+    // Capture the earliest candidate trip-start time at any confidence level,
+    // before the high-confidence gate below. Activity recognition often emits
+    // several low-confidence inVehicle readings before reaching the 60% threshold,
+    // so using the very first signal (even at 30-50%) gives a much more accurate
+    // trip-start timestamp when the trip is later confirmed.
+    if (type == ActivityType.inVehicle && !_isDriving && _firstVehicleTime == null) {
+      _firstVehicleTime = DateTime.now();
+      debugPrint('[DrivingMonitor] First vehicle candidate at confidence=$confidence');
+    }
+
     if (confidence < _minConfidence) return;
 
     switch (type) {
