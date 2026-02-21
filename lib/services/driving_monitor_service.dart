@@ -241,6 +241,7 @@ class DrivingMonitorService {
         }
         if (_vehicleReadings >= _debounceCount && !_isDriving) {
           _isDriving = true;
+          unawaited(_syncNativeDrivingState(isDriving: true));
           final firstTime = _firstVehicleTime;
           _firstVehicleTime = null;
           _lastVehicleLocation = null;
@@ -265,6 +266,7 @@ class DrivingMonitorService {
           final stillSecs = DateTime.now().difference(_stillSince!).inSeconds;
           if (stillSecs >= _minStillDurationSecs) {
             _isDriving = false;
+            unawaited(_syncNativeDrivingState(isDriving: false));
             _stillReadings = 0;
             final firstStillTime = _stillSince; // capture before clearing
             _stillSince = null;
@@ -289,6 +291,7 @@ class DrivingMonitorService {
           final stillSecs = DateTime.now().difference(_stillSince!).inSeconds;
           if (stillSecs >= _minWalkingDurationSecs) {
             _isDriving = false;
+            unawaited(_syncNativeDrivingState(isDriving: false));
             _stillReadings = 0;
             final firstStillTime = _stillSince; // capture before clearing
             _stillSince = null;
@@ -355,9 +358,12 @@ class DrivingMonitorService {
   Future<void> _maybeCloseVisit() async {
     if (!_visitActive) return;
 
-    // Capture and clear state atomically
+    // Capture and clear state atomically.
+    // Use DateTime.now() as the end time — the visit ends when this method is
+    // called (driving started or location changed), NOT when we last pinged
+    // the location. _visitLastTime can be hours stale for overnight stays.
     final start = _visitStartTime!;
-    final end = _visitLastTime!;
+    final end = DateTime.now();
     final lat = _visitLat!;
     final lon = _visitLon!;
     final location = _visitLocation ?? {'ok': true, 'lat': lat, 'lon': lon};
@@ -492,6 +498,18 @@ class DrivingMonitorService {
     } catch (_) {}
   }
 
+  /// Write Dart's current driving state to native SharedPreferences so the
+  /// native BroadcastReceiver never re-fires a trip-start that Dart handled.
+  Future<void> _syncNativeDrivingState({required bool isDriving}) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _bridge.invokeMethod('setNativeDrivingState', {'isDriving': isDriving});
+      debugPrint('[DrivingMonitor] Synced native isDriving=$isDriving');
+    } catch (e) {
+      debugPrint('[DrivingMonitor] Failed to sync native driving state: $e');
+    }
+  }
+
   Future<void> _pingAlive() async {
     if (!Platform.isAndroid) return;
     final now = DateTime.now();
@@ -505,6 +523,18 @@ class DrivingMonitorService {
   Future<void> _drainNativePendingEvents() async {
     try {
       final json = await _bridge.invokeMethod<String>('getPendingEvents');
+
+      // Always read native driving state so Dart is initialised correctly even
+      // if there are no pending events — prevents a duplicate trip-start when
+      // the activity stream fires while the user is already driving.
+      final nativeIsDriving =
+          await _bridge.invokeMethod<bool>('getNativeDrivingState') ?? false;
+      if (nativeIsDriving && !_isDriving) {
+        _isDriving = true;
+        _vehicleReadings = _debounceCount; // suppress debounce re-trigger
+        debugPrint('[DrivingMonitor] Initialised Dart isDriving=true from native state');
+      }
+
       if (json == null || json == '[]') return;
       final list = jsonDecode(json) as List<dynamic>;
       for (final raw in list) {

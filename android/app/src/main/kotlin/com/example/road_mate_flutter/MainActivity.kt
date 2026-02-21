@@ -171,6 +171,25 @@ class MainActivity : FlutterActivity() {
                             .apply()
                         result.success(json)
                     }
+                    // Read native isDriving so Dart can initialise its own state
+                    // after draining pending events, preventing duplicate trip-starts.
+                    "getNativeDrivingState" -> {
+                        val isDriving = prefs.getBoolean(
+                            DrivingDetectionReceiver.KEY_IS_DRIVING, false)
+                        result.success(isDriving)
+                    }
+                    // Dart calls this whenever _isDriving changes so native never
+                    // re-fires a trip-start event that Dart already handled.
+                    "setNativeDrivingState" -> {
+                        val isDriving = call.argument<Boolean>("isDriving") ?: false
+                        prefs.edit()
+                            .putBoolean(DrivingDetectionReceiver.KEY_IS_DRIVING, isDriving)
+                            .putInt(DrivingDetectionReceiver.KEY_VEHICLE_COUNT,
+                                    if (isDriving) DrivingDetectionReceiver.DEBOUNCE_COUNT else 0)
+                            .putInt(DrivingDetectionReceiver.KEY_STILL_COUNT, 0)
+                            .apply()
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }

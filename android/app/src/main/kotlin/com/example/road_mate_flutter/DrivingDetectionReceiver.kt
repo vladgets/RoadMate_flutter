@@ -37,9 +37,10 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
 
         const val PREFS_NAME = "roadmate_native_bridge"
         const val KEY_FLUTTER_ALIVE_TS = "flutter_alive_ts"
-        private const val KEY_IS_DRIVING = "native_is_driving"
-        private const val KEY_VEHICLE_COUNT = "native_vehicle_count"
-        private const val KEY_STILL_COUNT = "native_still_count"
+        // Public so MainActivity can read/write them when syncing Dart state.
+        const val KEY_IS_DRIVING = "native_is_driving"
+        const val KEY_VEHICLE_COUNT = "native_vehicle_count"
+        const val KEY_STILL_COUNT = "native_still_count"
         private const val KEY_STILL_SINCE_TS = "native_still_since_ts"
         const val KEY_PENDING_EVENTS = "native_pending_events"
         private const val KEY_LAST_VEH_LAT = "native_last_veh_lat"
@@ -55,7 +56,7 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
         // Flutter must have sent a heartbeat within this window or native takes over.
         private const val FLUTTER_ALIVE_WINDOW_MS = 120_000L
 
-        private const val DEBOUNCE_COUNT = 2
+        const val DEBOUNCE_COUNT = 2
         private const val MIN_CONFIDENCE = 60
 
         private const val VISIT_RADIUS_M = 150f
@@ -203,12 +204,12 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
             prefs.edit().putLong(KEY_VISIT_LAST_TS, now).apply()
             Log.d(TAG, "Visit still at same location (${distance.toInt()}m)")
         } else {
-            // Moved — commit previous visit if it qualifies, start fresh
+            // Moved — commit previous visit if it qualifies, start fresh.
+            // Use now as end time (visit ends when user moved, not last ping).
             val startTs = prefs.getLong(KEY_VISIT_START_TS, now)
-            val lastTs = prefs.getLong(KEY_VISIT_LAST_TS, now)
-            if (lastTs - startTs >= VISIT_THRESHOLD_MS) {
-                Log.d(TAG, "Visit ended by location change: ${(lastTs - startTs) / 60000}min")
-                addVisitPendingEvent(prefs, startTs, lastTs, visitLat, visitLon)
+            if (now - startTs >= VISIT_THRESHOLD_MS) {
+                Log.d(TAG, "Visit ended by location change: ${(now - startTs) / 60000}min")
+                addVisitPendingEvent(prefs, startTs, now, visitLat, visitLon)
             }
             prefs.edit()
                 .putBoolean(KEY_VISIT_ACTIVE, true)
@@ -225,9 +226,11 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
         if (!prefs.getBoolean(KEY_VISIT_ACTIVE, false)) return
 
         val startTs = prefs.getLong(KEY_VISIT_START_TS, 0L)
-        val lastTs = prefs.getLong(KEY_VISIT_LAST_TS, 0L)
         val visitLat = prefs.getFloat(KEY_VISIT_LAT, 0f)
         val visitLon = prefs.getFloat(KEY_VISIT_LON, 0f)
+        // Use now as end time — the visit ends when driving starts, not when we
+        // last pinged the location. lastTs can be many hours stale for overnight stays.
+        val now = System.currentTimeMillis()
 
         prefs.edit()
             .putBoolean(KEY_VISIT_ACTIVE, false)
@@ -237,9 +240,9 @@ class DrivingDetectionReceiver : BroadcastReceiver() {
             .remove(KEY_VISIT_LAST_TS)
             .apply()
 
-        if (lastTs - startTs >= VISIT_THRESHOLD_MS) {
-            Log.d(TAG, "Visit finalized on drive start: ${(lastTs - startTs) / 60000}min")
-            addVisitPendingEvent(prefs, startTs, lastTs, visitLat, visitLon)
+        if (now - startTs >= VISIT_THRESHOLD_MS) {
+            Log.d(TAG, "Visit finalized on drive start: ${(now - startTs) / 60000}min")
+            addVisitPendingEvent(prefs, startTs, now, visitLat, visitLon)
         }
     }
 
