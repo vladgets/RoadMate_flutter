@@ -70,6 +70,7 @@ class DrivingMonitorService {
   Map<String, dynamic>? _firstStillLocation; // GPS snapped at the first still event
   Map<String, dynamic>? _lastVehicleLocation;
   DateTime? _lastVehicleLocationTs;
+  Map<String, dynamic>? _lastVisitLocation; // saved from closed visit; fallback for trip-start
 
   // ---- Visit tracking state ----
   bool _visitActive = false;
@@ -368,6 +369,9 @@ class DrivingMonitorService {
     final lon = _visitLon!;
     final location = _visitLocation ?? {'ok': true, 'lat': lat, 'lon': lon};
 
+    // Save for trip-start location fallback before clearing.
+    if (location['ok'] == true) _lastVisitLocation = location;
+
     _visitActive = false;
     _visitLat = null;
     _visitLon = null;
@@ -439,6 +443,12 @@ class DrivingMonitorService {
         if (location['ok'] != true && _lastVehicleLocation != null) {
           location = _lastVehicleLocation!;
           debugPrint('[DrivingMonitor] GPS unavailable — using last-vehicle location for $type event');
+        }
+        // For trip starts, also fall back to the previous visit location
+        // (coordinates match when the trip begins right where the last visit ended).
+        if (type == 'start' && location['ok'] != true && _lastVisitLocation != null) {
+          location = _lastVisitLocation!;
+          debugPrint('[DrivingMonitor] GPS unavailable — using last-visit location for start event');
         }
       }
 
@@ -561,6 +571,30 @@ class DrivingMonitorService {
           // 'start' or 'park'
           final lat = (raw['lat'] as num?)?.toDouble();
           final lon = (raw['lon'] as num?)?.toDouble();
+
+          if (type == 'start' && _visitActive) {
+            // A trip started while the app was dead — any active visit ended then.
+            // Clear stale Dart visit state so returning to the same location later
+            // starts a fresh visit with the correct return time, not the old start.
+            if (_visitLocation != null && _visitLocation!['ok'] == true) {
+              _lastVisitLocation = _visitLocation;
+            }
+            _visitActive = false;
+            _visitLat = null;
+            _visitLon = null;
+            _visitStartTime = null;
+            _visitLastTime = null;
+            _visitLocation = null;
+            _visitStateController.add(null);
+            unawaited(_clearVisitState());
+            debugPrint('[DrivingMonitor] Cleared stale visit state on native trip-start drain');
+          }
+
+          // For park events with coordinates, save as last visit location fallback.
+          if (type == 'park' && lat != null && lon != null) {
+            _lastVisitLocation = {'ok': true, 'lat': lat, 'lon': lon};
+          }
+
           final event = DrivingEvent(
             id: _uuid.v4(),
             type: type,

@@ -17,6 +17,9 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
   List<DrivingEvent> _events = [];
   bool _loading = true;
   StreamSubscription<void>? _visitSub;
+  // Days (other than Today) that are currently expanded.
+  // Today is always expanded; all other days start collapsed.
+  final Set<String> _expandedDays = {};
 
   @override
   void initState() {
@@ -42,18 +45,37 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
     });
   }
 
-  /// Returns a flat list alternating day-header strings and DrivingEvents.
+  /// Returns a flat list of [_DaySectionRow] headers and [DrivingEvent] items.
+  /// Today is always expanded; other days start collapsed and toggle on tap.
   List<Object> _buildRows() {
     final rows = <Object>[];
-    String? lastDay;
+
+    // Group events by day label, preserving sort order (newest first).
+    final List<String> orderedDays = [];
+    final Map<String, List<DrivingEvent>> byDay = {};
     for (final event in _events) {
       final day = _dayLabel(event.timestamp);
-      if (day != lastDay) {
-        rows.add(day);
-        lastDay = day;
-      }
-      rows.add(event);
+      if (!byDay.containsKey(day)) orderedDays.add(day);
+      byDay.putIfAbsent(day, () => []).add(event);
     }
+
+    for (final day in orderedDays) {
+      final events = byDay[day]!;
+      final isToday = day == 'Today';
+      final isExpanded = isToday || _expandedDays.contains(day);
+
+      rows.add(_DaySectionRow(
+        label: day,
+        count: events.length,
+        isExpandable: !isToday,
+        isExpanded: isExpanded,
+      ));
+
+      if (isExpanded) {
+        rows.addAll(events);
+      }
+    }
+
     return rows;
   }
 
@@ -266,9 +288,9 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
                             itemCount: rows.length,
                             separatorBuilder: (_, i) {
                               // Suppress divider when adjacent to a day header.
-                              final afterHeader = rows[i] is String;
+                              final afterHeader = rows[i] is _DaySectionRow;
                               final beforeHeader =
-                                  (i + 1 < rows.length) && rows[i + 1] is String;
+                                  (i + 1 < rows.length) && rows[i + 1] is _DaySectionRow;
                               if (afterHeader || beforeHeader) {
                                 return const SizedBox.shrink();
                               }
@@ -276,8 +298,22 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
                             },
                             itemBuilder: (context, index) {
                               final row = rows[index];
-                              if (row is String) {
-                                return _DayHeader(label: row);
+                              if (row is _DaySectionRow) {
+                                return _DayHeader(
+                                  label: row.label,
+                                  count: row.count,
+                                  isExpandable: row.isExpandable,
+                                  isExpanded: row.isExpanded,
+                                  onTap: row.isExpandable
+                                      ? () => setState(() {
+                                            if (_expandedDays.contains(row.label)) {
+                                              _expandedDays.remove(row.label);
+                                            } else {
+                                              _expandedDays.add(row.label);
+                                            }
+                                          })
+                                      : null,
+                                );
                               }
                               final event = row as DrivingEvent;
                               return Dismissible(
@@ -353,25 +389,74 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
 }
 
 // ---------------------------------------------------------------------------
+// Day section row — used as a type-safe sentinel in the flat rows list
+// ---------------------------------------------------------------------------
+
+class _DaySectionRow {
+  final String label;
+  final int count;
+  final bool isExpandable;
+  final bool isExpanded;
+
+  const _DaySectionRow({
+    required this.label,
+    required this.count,
+    required this.isExpandable,
+    required this.isExpanded,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Day section header
 // ---------------------------------------------------------------------------
 
 class _DayHeader extends StatelessWidget {
-  const _DayHeader({required this.label});
+  const _DayHeader({
+    required this.label,
+    this.count = 0,
+    this.isExpandable = false,
+    this.isExpanded = true,
+    this.onTap,
+  });
+
   final String label;
+  final int count;
+  final bool isExpandable;
+  final bool isExpanded;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: Colors.grey[500],
-          letterSpacing: 0.4,
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[500],
+                letterSpacing: 0.4,
+              ),
+            ),
+            if (isExpandable) ...[
+              const SizedBox(width: 8),
+              Text(
+                '$count ${count == 1 ? 'event' : 'events'}',
+                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              ),
+              const Spacer(),
+              Icon(
+                isExpanded ? Icons.expand_less : Icons.expand_more,
+                size: 18,
+                color: Colors.grey[400],
+              ),
+            ],
+          ],
         ),
       ),
     );
