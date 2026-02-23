@@ -189,6 +189,10 @@ Future<void> main() async {
     await Workmanager().initialize(callbackDispatcher);
   }
 
+  // Initialize port for communication between TaskHandler and UI (must be called
+  // before addTaskDataCallback so sendDataToMain can find the ReceivePort).
+  FlutterForegroundTask.initCommunicationPort();
+
   // Initialize foreground service for voice mode
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
@@ -723,6 +727,11 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
       // Disable wakelock when disconnecting
       await WakelockPlus.disable();
 
+      // Deactivate tile before stopping the FGS — the OS may call
+      // onStartListening when the FGS notification is removed, so the static
+      // flag must be false by then or the tile briefly re-shows as active.
+      await AppControlService.setTileActive(false);
+
       // Stop foreground service
       await _stopForegroundService();
 
@@ -739,7 +748,6 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
           _status = "Disconnected.";
         });
       }
-      AppControlService.setTileActive(false);
     }
   }
 
