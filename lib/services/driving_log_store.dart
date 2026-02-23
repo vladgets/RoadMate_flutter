@@ -113,10 +113,29 @@ class DrivingLogStore {
       }
     }
 
+    final eventTs = eventTime?.toUtc() ?? DateTime.now().toUtc();
+
+    // Suppress duplicate: if a same-type event already exists within 5 min,
+    // return the existing one rather than creating a second consecutive event.
+    if (_hasDuplicateNearby(type, eventTs)) {
+      final existing = _events.firstWhere(
+        (e) {
+          if (e.type != type) return false;
+          try {
+            return eventTs.difference(DateTime.parse(e.timestamp)).abs().inMilliseconds <= 300000;
+          } catch (_) {
+            return false;
+          }
+        },
+      );
+      debugPrint('[DrivingLogStore] Suppressed duplicate $type event (${existing.id})');
+      return existing;
+    }
+
     final event = DrivingEvent(
       id: _uuid.v4(),
       type: type,
-      timestamp: (eventTime?.toUtc() ?? DateTime.now().toUtc()).toIso8601String(),
+      timestamp: eventTs.toIso8601String(),
       lat: lat,
       lon: lon,
       address: address,
@@ -197,6 +216,18 @@ class DrivingLogStore {
   /// Insert an already-constructed event (e.g. from native pending queue).
   Future<void> insertEvent(DrivingEvent event) async {
     await init();
+
+    // Suppress duplicate start/park events within 5-minute window.
+    if (event.type != 'visit') {
+      try {
+        final ts = DateTime.parse(event.timestamp);
+        if (_hasDuplicateNearby(event.type, ts)) {
+          debugPrint('[DrivingLogStore] Suppressed duplicate native ${event.type} event');
+          return;
+        }
+      } catch (_) {}
+    }
+
     _events.insert(0, event);
     _sortEvents();
     if (_events.length > _maxEvents) {
@@ -282,11 +313,31 @@ class DrivingLogStore {
   /// Sort events newest-first by effective timestamp.
   /// Visits use their end time so they appear at the position in the timeline
   /// where they concluded (right before the next trip), not where they started.
+  /// Tiebreaker: start events before park, park before visit — so a trip-start
+  /// at 3:30 appears above a visit that ended at 3:30.
   void _sortEvents() {
+    const typePriority = {'start': 0, 'park': 1, 'visit': 2};
     _events.sort((a, b) {
       final aTs = a.type == 'visit' ? (a.endTimestamp ?? a.timestamp) : a.timestamp;
       final bTs = b.type == 'visit' ? (b.endTimestamp ?? b.timestamp) : b.timestamp;
-      return bTs.compareTo(aTs); // descending
+      final cmp = bTs.compareTo(aTs); // descending by time
+      if (cmp != 0) return cmp;
+      // Tiebreaker: start > park > visit in the list (lowest priority = furthest down)
+      return (typePriority[a.type] ?? 2).compareTo(typePriority[b.type] ?? 2);
+    });
+  }
+
+  /// Returns true if an event of [type] already exists within [windowMs] ms
+  /// of [ts]. Used to suppress duplicate start/park events.
+  bool _hasDuplicateNearby(String type, DateTime ts, {int windowMs = 300000}) {
+    return _events.any((e) {
+      if (e.type != type) return false;
+      try {
+        final diff = ts.difference(DateTime.parse(e.timestamp)).abs().inMilliseconds;
+        return diff <= windowMs;
+      } catch (_) {
+        return false;
+      }
     });
   }
 

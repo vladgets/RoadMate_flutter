@@ -455,6 +455,13 @@ class DrivingMonitorService {
       final event = await DrivingLogStore.instance.logEvent(type, location,
           eventTime: eventTime);
 
+      // After a successful park, save location so the next trip start can use
+      // it as a fallback if GPS is unavailable at departure.
+      if (type == 'park' && location['ok'] == true) {
+        _lastVisitLocation = location;
+        debugPrint('[DrivingMonitor] Saved park location for next trip-start fallback');
+      }
+
       final timeStr = DateFormat('h:mm a').format(DateTime.now());
       String body;
       if (event.address != null && event.address!.isNotEmpty) {

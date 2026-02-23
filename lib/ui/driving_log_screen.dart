@@ -51,10 +51,12 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
     final rows = <Object>[];
 
     // Group events by day label, preserving sort order (newest first).
+    // Visits use their end timestamp for grouping so an overnight visit
+    // (started yesterday, ended today) appears under "Today" not "Yesterday".
     final List<String> orderedDays = [];
     final Map<String, List<DrivingEvent>> byDay = {};
     for (final event in _events) {
-      final day = _dayLabel(event.timestamp);
+      final day = _dayLabelForEvent(event);
       if (!byDay.containsKey(day)) orderedDays.add(day);
       byDay.putIfAbsent(day, () => []).add(event);
     }
@@ -94,6 +96,16 @@ class _DrivingLogScreenState extends State<DrivingLogScreen> {
     } catch (_) {
       return '';
     }
+  }
+
+  /// Day label for grouping purposes.
+  /// Visit events use their end timestamp so an overnight visit
+  /// (started yesterday, ended today) appears under "Today".
+  String _dayLabelForEvent(DrivingEvent event) {
+    if (event.type == 'visit' && event.endTimestamp != null) {
+      return _dayLabel(event.endTimestamp!);
+    }
+    return _dayLabel(event.timestamp);
   }
 
   String _buildMapLabel(DrivingEvent event) {
