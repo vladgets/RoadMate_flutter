@@ -15,7 +15,7 @@ class VoiceTriggerReceiver : BroadcastReceiver() {
         Log.d("RoadMateA11y", "VoiceTriggerReceiver: received ${intent.action} — launching MainActivity with TRIGGER_VOICE")
         val launch = Intent(context, MainActivity::class.java).apply {
             action = "com.example.road_mate_flutter.TRIGGER_VOICE"
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
         context.startActivity(launch)
     }

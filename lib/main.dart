@@ -490,7 +490,11 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
 
   @override
   void dispose() {
-    _thinkingSoundPlayer.dispose();
+    // Stop before dispose so MediaCodec drains its pending callbacks cleanly.
+    // Disposing a looping player without stopping first sends native callbacks
+    // to the already-dead EventHandler thread, producing a harmless but noisy
+    // "sending message to a Handler on a dead thread" warning.
+    _thinkingSoundPlayer.stop().whenComplete(_thinkingSoundPlayer.dispose);
     _webSearchClient.close();
     _disconnect();
     WidgetsBinding.instance.removeObserver(this);

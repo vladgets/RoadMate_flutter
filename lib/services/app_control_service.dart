@@ -33,7 +33,7 @@ class AppControlService {
   }
 
   void _startButtonChannel() {
-    if (!Platform.isAndroid) return;
+    if (!Platform.isAndroid && !Platform.isIOS) return;
     if (_buttonSub != null) return;
     debugPrint('[AppControl] opening voice trigger EventChannel');
     try {
@@ -42,7 +42,7 @@ class AppControlService {
           .listen(
         (event) {
           debugPrint('[AppControl] voice trigger event: $event');
-          if (event == 'double_tap') {
+          if (event == 'double_tap' || event == 'flic_tap') {
             _onVoiceStart?.call();
           } else if (event == 'stop_voice') {
             _onVoiceStop?.call();

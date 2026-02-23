@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
 import 'app_control_settings_screen.dart';
 import 'extensions_settings_screen.dart';
+import 'flic_settings_screen.dart';
 import 'onboarding_screen.dart';
 import 'whatsapp_settings_screen.dart';
 
@@ -157,6 +158,17 @@ class _AppConfigurationScreenState extends State<AppConfigurationScreen> {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const AppControlSettingsScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.bluetooth),
+            title: const Text('Flic Button'),
+            subtitle: const Text('Set up Flic Bluetooth button for voice'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const FlicSettingsScreen()),
               );
             },
           ),

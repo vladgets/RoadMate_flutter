@@ -44,6 +44,17 @@
 	<string>RoadMate uses motion data to detect when you start and end driving, so it can log your trip history automatically.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.example.road_mate_flutter</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>roadmate</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>whatsapp</string>

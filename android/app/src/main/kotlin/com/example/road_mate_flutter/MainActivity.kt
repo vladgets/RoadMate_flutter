@@ -56,8 +56,10 @@ class MainActivity : FlutterActivity() {
         // the intent arrives as getIntent() not onNewIntent — store it as pending so it
         // is replayed when Flutter subscribes to the EventChannel.
         pendingButtonEvent = when (intent?.action) {
-            "com.example.road_mate_flutter.TRIGGER_VOICE" -> "double_tap"
-            "com.example.road_mate_flutter.STOP_VOICE"    -> "stop_voice"
+            "com.example.road_mate_flutter.TRIGGER_VOICE" -> {
+                if (intent.getBooleanExtra("FLIC_BACKGROUND", false)) "flic_tap" else "double_tap"
+            }
+            "com.example.road_mate_flutter.STOP_VOICE" -> "stop_voice"
             else -> null
         }
         if (pendingButtonEvent != null) {
@@ -248,8 +250,10 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         val event = when (intent.action) {
-            "com.example.road_mate_flutter.TRIGGER_VOICE" -> "double_tap"
-            "com.example.road_mate_flutter.STOP_VOICE"    -> "stop_voice"
+            "com.example.road_mate_flutter.TRIGGER_VOICE" -> {
+                if (intent.getBooleanExtra("FLIC_BACKGROUND", false)) "flic_tap" else "double_tap"
+            }
+            "com.example.road_mate_flutter.STOP_VOICE" -> "stop_voice"
             else -> null
         } ?: return
         Log.d("RoadMateA11y", "MainActivity: onNewIntent ${intent.action} → $event")
