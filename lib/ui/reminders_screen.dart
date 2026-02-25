@@ -117,19 +117,23 @@ class _RemindersScreenState extends State<RemindersScreen> {
   }
 
   Future<void> _edit(Reminder r) async {
-    final controller = TextEditingController(text: r.text);
+    final isAi = r.aiPrompt != null;
+    // For AI reminders edit the prompt (what the AI uses to generate content).
+    // For regular reminders edit the label text.
+    final initialValue = isAi ? (r.aiPrompt ?? '') : r.text;
+    final controller = TextEditingController(text: initialValue);
 
-    final newText = await showDialog<String>(
+    final newValue = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Edit reminder'),
+        title: Text(isAi ? 'Edit AI instructions' : 'Edit reminder'),
         content: TextField(
           controller: controller,
           autofocus: true,
-          maxLines: 2,
-          decoration: const InputDecoration(
-            hintText: 'Reminder text…',
-            border: OutlineInputBorder(),
+          maxLines: isAi ? 4 : 2,
+          decoration: InputDecoration(
+            hintText: isAi ? 'What should the AI say each time?' : 'Reminder text…',
+            border: const OutlineInputBorder(),
           ),
           textCapitalization: TextCapitalization.sentences,
           onSubmitted: (v) => Navigator.pop(context, v.trim()),
@@ -147,10 +151,14 @@ class _RemindersScreenState extends State<RemindersScreen> {
       ),
     );
 
-    if (newText == null || newText.isEmpty || !mounted) return;
-    if (newText == r.text) return;
+    if (newValue == null || newValue.isEmpty || !mounted) return;
+    if (newValue == initialValue) return;
 
-    await RemindersService.instance.updateReminderText(r.id, newText);
+    if (isAi) {
+      await RemindersService.instance.updateAiPrompt(r.id, newValue);
+    } else {
+      await RemindersService.instance.updateReminderText(r.id, newValue);
+    }
     await _load();
   }
 

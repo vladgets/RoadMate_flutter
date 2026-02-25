@@ -348,6 +348,33 @@ class RemindersService {
     return upcoming;
   }
 
+  /// Update the AI prompt of an AI-generated reminder.
+  /// Re-schedules the WorkManager task so the next notification uses the new prompt.
+  Future<void> updateAiPrompt(int id, String newAiPrompt) async {
+    await init();
+    final all = await _loadAll();
+    final idx = all.indexWhere((r) => r.id == id);
+    if (idx < 0) return;
+
+    final old = all[idx];
+    final updated = Reminder(
+      id: old.id,
+      text: old.text,
+      scheduledAtLocalIso: old.scheduledAtLocalIso,
+      createdAtLocalIso: old.createdAtLocalIso,
+      status: old.status,
+      recurrence: old.recurrence,
+      dayOfWeek: old.dayOfWeek,
+      aiPrompt: newAiPrompt.trim(),
+    );
+    all[idx] = updated;
+    await _saveAll(all);
+
+    if (Platform.isAndroid) {
+      await _scheduleAiReminder(updated);
+    }
+  }
+
   /// Update only the display text/label of a reminder.
   /// Re-schedules the notification so the new text appears in the notification.
   Future<void> updateReminderText(int id, String newText) async {
