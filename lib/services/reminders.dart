@@ -359,7 +359,7 @@ class RemindersService {
     final old = all[idx];
     final updated = Reminder(
       id: old.id,
-      text: old.text,
+      text: newAiPrompt.trim(), // keep label in sync with prompt
       scheduledAtLocalIso: old.scheduledAtLocalIso,
       createdAtLocalIso: old.createdAtLocalIso,
       status: old.status,
