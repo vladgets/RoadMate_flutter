@@ -27,6 +27,7 @@ import 'services/photo_index_service.dart';
 import 'services/voice_memory_store.dart';
 import 'services/whatsapp_service.dart';
 import 'services/app_control_service.dart';
+import 'services/assistant_launch_service.dart';
 import 'ui/voice_memories_screen.dart';
 
 
@@ -245,6 +246,15 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (_connected || _connecting) return;
+
+      // Check if launched as assistant (long-press home on Android, Siri shortcut on iOS)
+      await AssistantLaunchService.instance.init();
+      if (AssistantLaunchService.instance.launchedAsAssistant) {
+        debugPrint('[Assistant] Launched via assistant action - auto-starting voice');
+        AssistantLaunchService.instance.clearLaunchState();
+        _connect();
+        return;
+      }
 
       // Check if auto-start is enabled (default: false)
       final prefs = await SharedPreferences.getInstance();
