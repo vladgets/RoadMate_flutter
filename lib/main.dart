@@ -866,8 +866,17 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
     return await MemoryStore.toolRead();
   },
   // Calendar tools
-  'get_calendar_data': (_) async {
-    return await CalendarStore.toolGetCalendarData();
+  'get_calendar_data': (args) async {
+    return await CalendarStore.toolGetCalendarData(args);
+  },
+  'create_calendar_event': (args) async {
+    return await CalendarStore.toolCreateCalendarEvent(args);
+  },
+  'update_calendar_event': (args) async {
+    return await CalendarStore.toolUpdateCalendarEvent(args);
+  },
+  'delete_calendar_event': (args) async {
+    return await CalendarStore.toolDeleteCalendarEvent(args);
   },
   // Time and date tool
   'get_current_time': (_) async {

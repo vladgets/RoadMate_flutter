@@ -18,9 +18,16 @@ class CalendarStore {
 
   static tz.TZDateTime _toTz(DateTime dt) {
     _ensureTzInitialized();
-    // Convert to local time first, then wrap in TZDateTime.
-    final local = dt.isUtc ? dt.toLocal() : dt;
-    return tz.TZDateTime.from(local, tz.local);
+    // Use epoch milliseconds with UTC zone so the absolute time is always
+    // correct regardless of tz.local defaulting to UTC on some devices.
+    return tz.TZDateTime.fromMillisecondsSinceEpoch(tz.UTC, dt.millisecondsSinceEpoch);
+  }
+
+  /// Convert a TZDateTime (or any DateTime) to a local ISO 8601 string with no
+  /// timezone offset, so the AI always sees times in the user's local timezone.
+  static String _toLocalIso(DateTime dt) {
+    final local = DateTime.fromMillisecondsSinceEpoch(dt.millisecondsSinceEpoch);
+    return local.toIso8601String();
   }
 
   /// Safely convert a value to String, handling null
@@ -43,9 +50,8 @@ class CalendarStore {
   }
 
   /// Tool-compatible wrapper: get calendar events
-  /// Returns events for the current date -7 + 30 days by default
-  /// Would be better to support date range configurable via args (not implemented yet)
-  static Future<Map<String, dynamic>> toolGetCalendarData() async {
+  /// Accepts optional start_date / end_date (ISO 8601). Defaults to ±7 days.
+  static Future<Map<String, dynamic>> toolGetCalendarData([dynamic args]) async {
     try {
       // Check permissions
       bool hasPermission = await hasPermissions();
@@ -95,10 +101,37 @@ class CalendarStore {
         debugPrint('  - ${cal.name ?? "Unknown"} (id: ${cal.id ?? "null"}, readOnly: ${cal.isReadOnly}, color: ${cal.color})');
       }
 
-      // Calculate date range: today ±30 days
+      // Calculate date range from args or default to ±7 days
       final now = DateTime.now();
-      final startDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7));
-      final endDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 30));
+      final today = DateTime(now.year, now.month, now.day);
+
+      DateTime startDate;
+      DateTime endDate;
+
+      final startStr = args is Map ? (args['start_date'] as String?) : null;
+      final endStr = args is Map ? (args['end_date'] as String?) : null;
+
+      if (startStr != null && startStr.isNotEmpty) {
+        try {
+          final parsed = DateTime.parse(startStr);
+          startDate = DateTime(parsed.year, parsed.month, parsed.day);
+        } catch (_) {
+          startDate = today.subtract(const Duration(days: 7));
+        }
+      } else {
+        startDate = today.subtract(const Duration(days: 7));
+      }
+
+      if (endStr != null && endStr.isNotEmpty) {
+        try {
+          final parsed = DateTime.parse(endStr);
+          endDate = DateTime(parsed.year, parsed.month, parsed.day, 23, 59, 59);
+        } catch (_) {
+          endDate = today.add(const Duration(days: 7));
+        }
+      } else {
+        endDate = today.add(const Duration(days: 7));
+      }
 
       // Retrieve events from all calendars
       final List<Map<String, dynamic>> allEvents = [];
@@ -169,8 +202,8 @@ class CalendarStore {
               // Safely extract event data, handling all possible null values
               final eventMap = <String, dynamic>{
                 'title': _safeString(event.title),
-                'start': event.start != null ? event.start!.toIso8601String() : '',
-                'end': event.end != null ? event.end!.toIso8601String() : '',
+                'start': event.start != null ? _toLocalIso(event.start!) : '',
+                'end': event.end != null ? _toLocalIso(event.end!) : '',
                 'description': _safeString(event.description),
                 'location': _safeString(event.location),
                 'calendar': calendarName,
@@ -222,12 +255,22 @@ class CalendarStore {
 
       return {
         'ok': true,
+        'today': '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}',
         'events': allEvents,
         'count': allEvents.length,
         'date_range': {
           'start': startDate.toIso8601String(),
           'end': endDate.toIso8601String(),
         },
+        'writable_calendars': calendars
+            .where((c) => c.id != null && c.id!.isNotEmpty && c.isReadOnly != true)
+            .map((c) => {
+                  'id': c.id,
+                  'name': c.name ?? 'Unknown',
+                  'account': c.accountName ?? '',
+                  'is_default': c.isDefault ?? false,
+                })
+            .toList(),
       };
     } catch (e) {
       return {
@@ -237,22 +280,32 @@ class CalendarStore {
     }
   }
 
-  /// Get default calendar for creating events (first non-read-only calendar)
+  /// Get default calendar for creating events.
+  /// Priority: device default → Google account → first writable.
   static Future<Calendar?> _getDefaultCalendar() async {
     final calendarsResult = await _deviceCalendarPlugin.retrieveCalendars();
     if (!calendarsResult.isSuccess || calendarsResult.data == null) {
       return null;
     }
 
-    final calendars = calendarsResult.data!;
-    for (final calendar in calendars) {
-      if (calendar.id != null && 
-          calendar.id!.isNotEmpty && 
-          calendar.isReadOnly != true) {
-        return calendar;
-      }
-    }
-    return null;
+    final writable = calendarsResult.data!
+        .where((c) => c.id != null && c.id!.isNotEmpty && c.isReadOnly != true)
+        .toList();
+
+    if (writable.isEmpty) return null;
+
+    // 1. Device-default writable calendar
+    final deviceDefault = writable.where((c) => c.isDefault == true).firstOrNull;
+    if (deviceDefault != null) return deviceDefault;
+
+    // 2. Any Google account calendar (accountType = "com.google")
+    final google = writable
+        .where((c) => (c.accountType ?? '').toLowerCase().contains('google'))
+        .firstOrNull;
+    if (google != null) return google;
+
+    // 3. Fallback: first writable
+    return writable.first;
   }
 
   /// Find event by title and approximate date
@@ -524,6 +577,15 @@ class CalendarStore {
   /// Tool-compatible wrapper: update calendar event
   static Future<Map<String, dynamic>> toolUpdateCalendarEvent(dynamic args) async {
     try {
+      // Require explicit confirmation to prevent accidental updates
+      final confirmed = args is Map ? (args['confirmed'] as bool?) : null;
+      if (confirmed != true) {
+        return {
+          'ok': false,
+          'error': 'User confirmation required before updating an event.',
+        };
+      }
+
       // Check permissions
       bool hasPermission = await hasPermissions();
       if (!hasPermission) {
@@ -535,15 +597,14 @@ class CalendarStore {
 
       // Parse arguments
       final eventId = args is Map ? (args['event_id'] as String?) : null;
-      final title = args is Map ? (args['title'] as String?) : null;
+      // 'title' is used only to find the event; 'new_title' renames it
+      final searchTitle = args is Map ? (args['title'] as String?) : null;
+      final newTitle = args is Map ? (args['new_title'] as String?) : null;
+      final startDateStr = args is Map ? (args['start_date'] as String?) : null;
       final startStr = args is Map ? (args['start'] as String?) : null;
       final endStr = args is Map ? (args['end'] as String?) : null;
       final description = args is Map ? (args['description'] as String?) : null;
       final location = args is Map ? (args['location'] as String?) : null;
-
-      // Alternative: search by title and date
-      final searchTitle = args is Map ? (args['title'] as String?) : null;
-      final startDateStr = args is Map ? (args['start_date'] as String?) : null;
 
       Event? event;
       String? calendarId;
@@ -647,8 +708,8 @@ class CalendarStore {
       debugPrint('>>> Original: start=${originalStart?.toIso8601String()}, end=${originalEnd?.toIso8601String()}, duration=$eventDuration');
 
       // Update event fields
-      if (title != null && title.isNotEmpty) {
-        event.title = title;
+      if (newTitle != null && newTitle.isNotEmpty) {
+        event.title = newTitle;
       }
       
       DateTime? newStart;
@@ -732,7 +793,7 @@ class CalendarStore {
 
       // Build list of updated fields
       final updatedFields = <String>[];
-      if (title != null && title.isNotEmpty) updatedFields.add('title');
+      if (newTitle != null && newTitle.isNotEmpty) updatedFields.add('title');
       if (startStr != null && startStr.isNotEmpty) updatedFields.add('start');
       if (endStr != null && endStr.isNotEmpty) updatedFields.add('end');
       if (description != null) updatedFields.add('description');
@@ -760,6 +821,15 @@ class CalendarStore {
   /// Tool-compatible wrapper: delete calendar event
   static Future<Map<String, dynamic>> toolDeleteCalendarEvent(dynamic args) async {
     try {
+      // Require explicit confirmation to prevent accidental deletions
+      final confirmed = args is Map ? (args['confirmed'] as bool?) : null;
+      if (confirmed != true) {
+        return {
+          'ok': false,
+          'error': 'User confirmation required before deleting an event.',
+        };
+      }
+
       // Check permissions
       bool hasPermission = await hasPermissions();
       if (!hasPermission) {

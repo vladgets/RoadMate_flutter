@@ -28,20 +28,16 @@ Voice Notes vs Memory:
 Photos: search_photos by location/time. Reply with just "Here are X photos" — no descriptions, no locations, no lists. Thumbnails show all details.
 WebSearch: for up-to-date/verifiable facts only.
 
+Calendar (events/meetings → syncs to Google): create/update/delete_calendar_event. Get calendar IDs via get_calendar_data first. Confirm before update/delete. Never use tap_ui_button for calendar operations.
+Reminders (personal notifications only, no calendar sync): reminder_create.
+Rule: other person or named event → calendar. Personal nudge → reminder.
+
 Reminders:
 - One-shot: "Remind me at 3pm to call dentist" → reminder_create with text + when_iso
 - Daily: "Remind me every morning at 7am to drink water" → recurrence='daily'
 - Weekly: "Remind me every Monday at 8am" → recurrence='weekly', day_of_week=1
 - AI content: "Send me an inspiring quote every day at 6am" → recurrence='daily', ai_prompt='inspiring quote, 1-2 sentences', text='Morning quote'
 - AI + style: "Inspiring quote every Monday at 8am in style of Jensen Huang" → recurrence='weekly', day_of_week=1, ai_prompt='inspiring quote in style of Jensen Huang, 1-2 sentences', text='Monday inspiration'
-
-App Voice Control (Android only):
-- Tap: "confirm", "yes", "no", "dismiss", "skip", "close" → tap_ui_button
-- Launch: "open Spotify", "launch Waze", "start Google Maps" → launch_app
-- Type: "type hello in the search", "enter my email" → type_text
-- Inspect: "what app is open" / "what buttons" / "what's on screen" / "check again" → ALWAYS call get_foreground_app — never answer from memory
-- If disabled: tell user to enable in RoadMate Settings > App Control
-- Confirm: "Done!" on success; explain if button not found
 
 Date: {{CURRENT_DATE_READABLE}}
 ''';
@@ -191,8 +187,20 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "get_calendar_data",
-      "description": "Fetch calendar events.",
-      "parameters": {"type": "object", "properties": {}}
+      "description": "Fetch calendar events. If the user asks about a specific date or range, pass start_date and end_date (ISO 8601, e.g. '2026-03-19'). If omitted, defaults to 7 days back and 7 days forward.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "start_date": {
+            "type": "string",
+            "description": "Start of the date range (ISO 8601, e.g. '2026-03-19'). Defaults to 7 days ago."
+          },
+          "end_date": {
+            "type": "string",
+            "description": "End of the date range (ISO 8601, e.g. '2026-03-25'). Defaults to 7 days from now."
+          }
+        }
+      }
     },
     // time and date
     {
@@ -634,7 +642,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "create_calendar_event",
-      "description": "Create a new calendar event.",
+      "description": "Create a new calendar event. If the user has a preferred calendar (e.g. Google Calendar), use its ID from the writable_calendars list returned by get_calendar_data.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -648,7 +656,7 @@ $trimmedPrefs''';
           },
           "end": {
             "type": "string",
-            "description": "End date and time in ISO 8601 format (optional)"
+            "description": "End date and time in ISO 8601 format (optional, defaults to 1 hour after start)"
           },
           "description": {
             "type": "string",
@@ -658,6 +666,10 @@ $trimmedPrefs''';
             "type": "string",
             "description": "Event location (optional)"
           },
+          "calendar_id": {
+            "type": "string",
+            "description": "ID of the calendar to create the event in (optional). Use writable_calendars from get_calendar_data to find the right ID."
+          }
         },
         "required": ["title", "start"]
       }
@@ -665,63 +677,75 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "update_calendar_event",
-      "description": "Update an existing calendar event.",
+      "description": "Update an existing calendar event. Always confirm with the user before calling. Identify the event via event_id OR (title + start_date).",
       "parameters": {
         "type": "object",
         "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "description": "Must be true. Always ask the user to confirm before calling this tool."
+          },
           "event_id": {
             "type": "string",
-            "description": "Event ID to update (use this if you know the exact event ID)"
+            "description": "Event ID to update. Use this when you already know the ID from a prior get_calendar_data call."
           },
           "title": {
             "type": "string",
-            "description": "Event title - use for searching if event_id not provided, or as new title to update"
+            "description": "Current event title, used to find the event (required if event_id not provided)."
           },
           "start_date": {
             "type": "string",
-            "description": "Start date in ISO 8601 format - use with title to find event if event_id not provided"
+            "description": "Current start date (ISO 8601) to help find the event (required if event_id not provided)."
+          },
+          "new_title": {
+            "type": "string",
+            "description": "New title to rename the event to (optional)."
           },
           "start": {
             "type": "string",
-            "description": "New start date and time in ISO 8601 format (optional, to update)"
+            "description": "New start date and time (ISO 8601, optional)."
           },
           "end": {
             "type": "string",
-            "description": "New end date and time in ISO 8601 format (optional, to update)"
+            "description": "New end date and time (ISO 8601, optional)."
           },
           "description": {
             "type": "string",
-            "description": "New event description (optional, to update)"
+            "description": "New event description (optional)."
           },
           "location": {
             "type": "string",
-            "description": "New event location (optional, to update)"
+            "description": "New event location (optional)."
           }
         },
-        "required": []
+        "required": ["confirmed"]
       }
     },
     {
       "type": "function",
       "name": "delete_calendar_event",
-      "description": "Delete a calendar event.",
+      "description": "Delete a calendar event. Always confirm with the user before calling. Identify the event via event_id OR (title + start_date).",
       "parameters": {
         "type": "object",
         "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "description": "Must be true. Always ask the user to confirm before calling this tool."
+          },
           "event_id": {
             "type": "string",
-            "description": "Event ID to delete (use this if you know the exact event ID)"
+            "description": "Event ID to delete. Use this when you already know the ID from a prior get_calendar_data call."
           },
           "title": {
             "type": "string",
-            "description": "Event title to search for (required if event_id not provided)"
+            "description": "Event title to search for (required if event_id not provided)."
           },
           "start_date": {
             "type": "string",
-            "description": "Start date in ISO 8601 format (required if event_id not provided, used with title to find event)"
+            "description": "Start date (ISO 8601, required if event_id not provided)."
           }
         },
-        "required": []
+        "required": ["confirmed"]
       }
     },
   ];
