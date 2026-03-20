@@ -507,34 +507,31 @@ class CalendarStore {
         };
       }
 
-      // Get calendar
+      // Get calendar — match by ID first, then by name/account, then default
       Calendar? calendar;
       if (calendarId != null && calendarId.isNotEmpty) {
         final calendarsResult = await _deviceCalendarPlugin.retrieveCalendars();
         if (calendarsResult.isSuccess && calendarsResult.data != null) {
-          for (final cal in calendarsResult.data!) {
-            if (cal.id == calendarId && cal.isReadOnly != true) {
-              calendar = cal;
-              break;
-            }
-          }
-        }
-        if (calendar == null) {
-          return {
-            'ok': false,
-            'error': 'Calendar not found or is read-only',
-          };
-        }
-      } else {
-        calendar = await _getDefaultCalendar();
-        if (calendar == null) {
-          return {
-            'ok': false,
-            'error': 'No writable calendar found',
-          };
+          final writable = calendarsResult.data!
+              .where((c) => c.id != null && c.id!.isNotEmpty && c.isReadOnly != true)
+              .toList();
+          // 1. Exact ID match
+          calendar = writable.where((c) => c.id == calendarId).firstOrNull;
+          // 2. Name or account email match
+          calendar ??= writable.where((c) =>
+              (c.name ?? '').toLowerCase() == calendarId.toLowerCase() ||
+              (c.accountName ?? '').toLowerCase() == calendarId.toLowerCase()).firstOrNull;
+          // 3. Fall back to default rather than hard-failing
+          calendar ??= writable.where((c) => c.isDefault == true).firstOrNull ?? writable.firstOrNull;
         }
       }
-
+      calendar ??= await _getDefaultCalendar();
+      if (calendar == null) {
+        return {
+          'ok': false,
+          'error': 'No writable calendar found',
+        };
+      }
       // Create event
       final event = Event(calendar.id!);
       event.title = title;

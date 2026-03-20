@@ -28,8 +28,8 @@ Voice Notes vs Memory:
 Photos: search_photos by location/time. Reply with just "Here are X photos" — no descriptions, no locations, no lists. Thumbnails show all details.
 WebSearch: for up-to-date/verifiable facts only.
 
-Calendar (events/meetings → syncs to Google): create/update/delete_calendar_event. Get calendar IDs via get_calendar_data first.
-Reminders (personal notifications only, no calendar sync): reminder_create.
+Calendar (syncs to Google): create_calendar_event = new events only. To change existing: get_calendar_data first (get event_id) → update_calendar_event. To remove: delete_calendar_event.
+Reminders (local notifications only, no calendar sync): reminder_create.
 Rule: other person or named event → calendar. Personal nudge → reminder.
 
 Reminders:
@@ -607,7 +607,7 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "create_calendar_event",
-      "description": "Create a new calendar event. If the user has a preferred calendar (e.g. Google Calendar), use its ID from the writable_calendars list returned by get_calendar_data.",
+      "description": "Create a NEW calendar event that does not exist yet. For modifying an existing event use update_calendar_event instead. Use calendar_id from writable_calendars in get_calendar_data response.",
       "parameters": {
         "type": "object",
         "properties": {
