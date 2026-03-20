@@ -201,6 +201,7 @@ class CalendarStore {
               
               // Safely extract event data, handling all possible null values
               final eventMap = <String, dynamic>{
+                'event_id': event.eventId ?? '',
                 'title': _safeString(event.title),
                 'start': event.start != null ? _toLocalIso(event.start!) : '',
                 'end': event.end != null ? _toLocalIso(event.end!) : '',
@@ -577,15 +578,6 @@ class CalendarStore {
   /// Tool-compatible wrapper: update calendar event
   static Future<Map<String, dynamic>> toolUpdateCalendarEvent(dynamic args) async {
     try {
-      // Require explicit confirmation to prevent accidental updates
-      final confirmed = args is Map ? (args['confirmed'] as bool?) : null;
-      if (confirmed != true) {
-        return {
-          'ok': false,
-          'error': 'User confirmation required before updating an event.',
-        };
-      }
-
       // Check permissions
       bool hasPermission = await hasPermissions();
       if (!hasPermission) {
@@ -805,8 +797,8 @@ class CalendarStore {
         'ok': true,
         'event_id': event.eventId,
         'title': event.title ?? '',
-        'start': event.start?.toIso8601String() ?? '',
-        'end': event.end?.toIso8601String() ?? '',
+        'start': event.start != null ? _toLocalIso(event.start!) : '',
+        'end': event.end != null ? _toLocalIso(event.end!) : '',
         'updated_fields': updatedFields,
         'message': 'Event updated successfully',
       };
@@ -821,15 +813,6 @@ class CalendarStore {
   /// Tool-compatible wrapper: delete calendar event
   static Future<Map<String, dynamic>> toolDeleteCalendarEvent(dynamic args) async {
     try {
-      // Require explicit confirmation to prevent accidental deletions
-      final confirmed = args is Map ? (args['confirmed'] as bool?) : null;
-      if (confirmed != true) {
-        return {
-          'ok': false,
-          'error': 'User confirmation required before deleting an event.',
-        };
-      }
-
       // Check permissions
       bool hasPermission = await hasPermissions();
       if (!hasPermission) {

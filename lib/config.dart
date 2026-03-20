@@ -28,7 +28,7 @@ Voice Notes vs Memory:
 Photos: search_photos by location/time. Reply with just "Here are X photos" — no descriptions, no locations, no lists. Thumbnails show all details.
 WebSearch: for up-to-date/verifiable facts only.
 
-Calendar (events/meetings → syncs to Google): create/update/delete_calendar_event. Get calendar IDs via get_calendar_data first. Confirm before update/delete. Never use tap_ui_button for calendar operations.
+Calendar (events/meetings → syncs to Google): create/update/delete_calendar_event. Get calendar IDs via get_calendar_data first.
 Reminders (personal notifications only, no calendar sync): reminder_create.
 Rule: other person or named event → calendar. Personal nudge → reminder.
 
@@ -529,66 +529,31 @@ $trimmedPrefs''';
         "properties": {}
       }
     },
-    // App voice control tools (Android only)
-    {
-      "type": "function",
-      "name": "tap_ui_button",
-      "description": "Tap a button in the currently active foreground app by its visible text label. Works with any app — Waze, Google Maps, Spotify, etc. Use when user wants to interact with another app hands-free.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "button_text": {
-            "type": "string",
-            "description": "Visible text label of the button to tap (e.g. 'Confirm', 'Not there', 'OK', 'Skip', 'Dismiss')"
-          },
-          "app_hint": {
-            "type": "string",
-            "description": "Optional: name of the expected app for the spoken response (e.g. 'Waze'). Does not restrict which app is controlled."
-          }
-        },
-        "required": ["button_text"]
-      }
-    },
-    {
-      "type": "function",
-      "name": "get_foreground_app",
-      "description": "Get the currently active foreground app and what's visible on screen: package name, list of tappable buttons, and all visible text. Use when user asks what app is open, what buttons are available, or before deciding what to tap.",
-      "parameters": {"type": "object", "properties": {}}
-    },
-    {
-      "type": "function",
-      "name": "launch_app",
-      "description": "Open/launch an app on the device by name. Use when user says 'open Spotify', 'launch Waze', 'start Google Maps', 'go to Instagram', etc.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "app_name": {
-            "type": "string",
-            "description": "Name of the app to launch (e.g. 'Spotify', 'Google Maps', 'WhatsApp', 'Facebook')"
-          }
-        },
-        "required": ["app_name"]
-      }
-    },
-    {
-      "type": "function",
-      "name": "type_text",
-      "description": "Type text into an editable text field in the currently active foreground app.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "type": "string",
-            "description": "The text to type into the field"
-          },
-          "field_hint": {
-            "type": "string",
-            "description": "Optional: hint to identify which field to type in."
-          }
-        },
-        "required": ["text"]
-      }
-    },
+    // App voice control tools (Android only) — disabled, kept for future use
+    // {
+    //   "type": "function",
+    //   "name": "tap_ui_button",
+    //   "description": "Tap a button in the currently active foreground app by its visible text label.",
+    //   ...
+    // },
+    // {
+    //   "type": "function",
+    //   "name": "get_foreground_app",
+    //   "description": "Get the currently active foreground app and what's visible on screen.",
+    //   ...
+    // },
+    // {
+    //   "type": "function",
+    //   "name": "launch_app",
+    //   "description": "Open/launch an app on the device by name.",
+    //   ...
+    // },
+    // {
+    //   "type": "function",
+    //   "name": "type_text",
+    //   "description": "Type text into an editable text field in the currently active foreground app.",
+    //   ...
+    // },
     {
       "type": "function",
       "name": "get_driving_log",
@@ -677,14 +642,10 @@ $trimmedPrefs''';
     {
       "type": "function",
       "name": "update_calendar_event",
-      "description": "Update an existing calendar event. Always confirm with the user before calling. Identify the event via event_id OR (title + start_date).",
+      "description": "Update an existing calendar event. Verbally confirm the change with the user before calling. Always prefer event_id from a prior get_calendar_data call — only fall back to title + start_date if event_id is unavailable.",
       "parameters": {
         "type": "object",
         "properties": {
-          "confirmed": {
-            "type": "boolean",
-            "description": "Must be true. Always ask the user to confirm before calling this tool."
-          },
           "event_id": {
             "type": "string",
             "description": "Event ID to update. Use this when you already know the ID from a prior get_calendar_data call."
@@ -718,20 +679,16 @@ $trimmedPrefs''';
             "description": "New event location (optional)."
           }
         },
-        "required": ["confirmed"]
+        "required": []
       }
     },
     {
       "type": "function",
       "name": "delete_calendar_event",
-      "description": "Delete a calendar event. Always confirm with the user before calling. Identify the event via event_id OR (title + start_date).",
+      "description": "Delete a calendar event. Verbally confirm with the user before calling. Always prefer event_id from a prior get_calendar_data call — only fall back to title + start_date if event_id is unavailable.",
       "parameters": {
         "type": "object",
         "properties": {
-          "confirmed": {
-            "type": "boolean",
-            "description": "Must be true. Always ask the user to confirm before calling this tool."
-          },
           "event_id": {
             "type": "string",
             "description": "Event ID to delete. Use this when you already know the ID from a prior get_calendar_data call."
@@ -745,7 +702,7 @@ $trimmedPrefs''';
             "description": "Start date (ISO 8601, required if event_id not provided)."
           }
         },
-        "required": ["confirmed"]
+        "required": []
       }
     },
   ];
