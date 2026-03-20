@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -885,6 +886,20 @@ class _VoiceButtonPageState extends State<VoiceButtonPage> with WidgetsBindingOb
   // Web search tool
   'web_search': (args) async {
     return await _webSearchTool.call(args);
+  },
+  'open_url': (args) async {
+    final url = args is Map ? (args['url'] as String?) : null;
+    if (url == null || url.isEmpty) {
+      return {'ok': false, 'error': 'No URL provided'};
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) {
+      return {'ok': false, 'error': 'Invalid URL: $url'};
+    }
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    return launched
+        ? {'ok': true, 'url': url}
+        : {'ok': false, 'error': 'Could not open URL: $url'};
   },
   'gmail_search': (args) async {
     // If client id / gmail client isn't ready yet, fail fast with a clear error.

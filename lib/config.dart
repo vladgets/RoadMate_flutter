@@ -26,7 +26,7 @@ Voice Notes vs Memory:
 - search_voice_notes = search by text/location/time
 
 Photos: search_photos by location/time. Reply with just "Here are X photos" — no descriptions, no locations, no lists. Thumbnails show all details.
-WebSearch: for up-to-date/verifiable facts only.
+WebSearch: for up-to-date/verifiable facts only. Use open_url to open any link the user asks to visit.
 
 Calendar (syncs to Google): create_calendar_event = new events only. To change existing: get_calendar_data first (get event_id) → update_calendar_event. To remove: delete_calendar_event.
 Reminders (local notifications only, no calendar sync): reminder_create.
@@ -218,6 +218,21 @@ $trimmedPrefs''';
         "type": "object",
         "properties": {"query": {"type": "string"}},
         "required": ["query"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "open_url",
+      "description": "Open a URL in the device's default browser. Use when the user asks to open, visit, or follow a link mentioned in conversation.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The full URL to open, including https://"
+          }
+        },
+        "required": ["url"]
       }
     },
     // gmail tools
